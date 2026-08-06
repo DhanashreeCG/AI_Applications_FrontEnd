@@ -232,6 +232,11 @@
         outline: none;
       }
 
+      .extra-row select#templateSelect {
+        min-width: 260px;
+        max-width: 420px;
+      }
+
       .actions {
         display: flex;
         gap: 16px;
@@ -693,8 +698,10 @@
       /* images sit flush: no frame, no outline, never cropped */
       .uno-figure img {
         display: block;
-        width: 100%;
-        height: 100%;
+        max-width: 100%;
+        max-height: 100%;
+        width: auto;
+        height: auto;
         object-fit: contain;
         object-position: center;
         border: 0;
@@ -948,15 +955,15 @@
       /* offscreen export stage */
       .export-stage {
         position: fixed;
-        left: -20000px;
+        left: 0;
         top: 0;
-        width: 1000px;
-        z-index: -1;
+        visibility: hidden;
         pointer-events: none;
+        z-index: -1;
+        overflow: hidden;
       }
 
       .export-stage .uno {
-        width: 1000px;
         box-shadow: none;
       }
 
@@ -1138,6 +1145,154 @@
         }
       }
 
+      /* ---------- layout engine (configuration-driven) ---------- */
+
+      .layout-root {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2cqw;
+      }
+
+      .layout-root.horizontal {
+        flex-direction: row;
+      }
+
+      .layout-root.two-column {
+        gap: 2cqw;
+      }
+
+      .layout-root.two-column .layout-row {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2cqw;
+      }
+
+      .layout-root.grid .layout-region[data-region-id='body'] .uno-cells {
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+
+      .layout-root.overlay .layout-region[data-region-id='body'] {
+        position: relative;
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .layout-root.overlay .layout-region[data-region-id='overlay'] {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 2;
+        pointer-events: none;
+      }
+
+      .layout-root.split .layout-split {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2cqw;
+      }
+
+      .layout-region {
+        display: flex;
+        min-width: 0;
+      }
+
+      .layout-region[data-region-id='header'] {
+        flex: 0 0 auto;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 2cqw;
+      }
+
+      .layout-region[data-region-id='body'] {
+        flex: 1 1 auto;
+        min-height: 0;
+        flex-direction: column;
+        gap: 1.6cqw;
+      }
+
+      .layout-region[data-region-id='footer'],
+      .layout-region[data-region-id='bottom'] {
+        flex: 0 0 auto;
+        flex-direction: column;
+        gap: 1.4cqw;
+        text-align: center;
+      }
+
+      .layout-region[data-region-id='left'],
+      .layout-region[data-region-id='right'] {
+        flex: 1 1 auto;
+        min-width: 0;
+        min-height: 0;
+        flex-direction: column;
+        gap: 1cqw;
+      }
+
+      .layout-region.hidden {
+        display: none !important;
+      }
+
+      .comp-placeholder {
+        padding: 2cqw 2.4cqw;
+        border-radius: 2.4cqw;
+        background: #f7f5ff;
+        color: #8b84ab;
+        font-size: 3.2cqw;
+        text-align: center;
+      }
+
+      .comp-chips {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 1.2cqw;
+      }
+
+      .comp-chip {
+        padding: 1.2cqw 3cqw;
+        border-radius: 999px;
+        background: var(--tint);
+        color: var(--frame-ink);
+        font-family: 'Baloo 2', sans-serif;
+        font-weight: 700;
+        font-size: 3.6cqw;
+      }
+
+      .comp-options {
+        display: flex;
+        flex-direction: column;
+        gap: 1cqw;
+        text-align: left;
+      }
+
+      .comp-option {
+        padding: 1.4cqw 2cqw;
+        border-radius: 2cqw;
+        background: var(--tint);
+        font-size: 3.6cqw;
+        line-height: 1.35;
+        color: #3d3552;
+      }
+
+      [contenteditable='true'] {
+        outline: none;
+        cursor: text;
+      }
+
+      [contenteditable='true']:focus {
+        box-shadow: 0 0 0 0.4cqw rgba(109, 40, 217, 0.18);
+        border-radius: 1.2cqw;
+      }
+
     </style>
   </head>
   <body>
@@ -1184,8 +1339,16 @@
         </div>
 
         <div class="extra-row">
+          <label for="templateSelect">Template</label>
+          <select id="templateSelect">
+            <option value="">Auto — no template selected</option>
+          </select>
+        </div>
+
+        <div class="extra-row">
           <label for="count">Number of cards</label>
           <select id="count">
+            <option>1</option>
             <option>3</option>
             <option selected>5</option>
             <option>8</option>
@@ -1302,26 +1465,7 @@
         { frame: '#A78BFA', ink: '#4a2ca0', tint: '#F1EBFF', dash: 'rgba(255,255,255,.95)', bubble: '#4C1D95' },
       ];
 
-      const TEXT_ORDER = [
-        'title',
-        'heading',
-        'word',
-        'caption',
-        'subtitle',
-        'supportive_text',
-        'sentence',
-        'description',
-        'pronunciation',
-        'phonics',
-        'fact',
-        'question',
-        'answer',
-        'badge',
-        'footer',
-      ];
-
       const IMAGE_TYPES = new Set(['image', 'illustration', 'photo', 'asset']);
-      const HEADLINE_TYPES = new Set(['title', 'heading', 'word', 'caption', 'letter', 'number']);
 
       /* ---------------- small helpers ---------------- */
 
@@ -1405,12 +1549,119 @@
         return out;
       }
 
+      function uuid() {
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+          const r = (Math.random() * 16) | 0;
+          return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+        });
+      }
+
+      function humanize(text) {
+        return String(text || '')
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, (ch) => ch.toUpperCase());
+      }
+
+      function componentTypeOf(component) {
+        return (component.componentType || component.type || '').toLowerCase();
+      }
+
+      function componentIdOf(component) {
+        return (component.componentId || component.id || '').toLowerCase();
+      }
+
+      function isImageCollection(component) {
+        const type = componentTypeOf(component);
+        const id = componentIdOf(component);
+        return type === 'imagecollection' || id === 'objectgrid' || id === 'imagecollection';
+      }
+
+      function isImageComponent(component) {
+        if (isImageCollection(component)) return false;
+        const type = componentTypeOf(component);
+        const id = componentIdOf(component);
+        if (type === 'image' || IMAGE_TYPES.has(type)) return true;
+        return ['leftimage', 'rightimage', 'image', 'illustration', 'photo'].includes(id);
+      }
+
+      function collectionItems(component) {
+        return component.items || component.images || component.collection || component.assetReferences || [];
+      }
+
+      function contentFromComponent(component) {
+        if (component.content != null && component.content !== '') return component.content;
+        const list = component.options || component.chips || component.categories;
+        if (Array.isArray(list) && list.length) {
+          return list
+            .map((entry) => {
+              if (typeof entry === 'string') return entry;
+              return entry.label || entry.text || entry.content || entry.value || '';
+            })
+            .filter(Boolean)
+            .join(' · ');
+        }
+        return null;
+      }
+
+      function collectImageRefs(component) {
+        const refs = [];
+        if (isImageCollection(component)) {
+          for (const item of collectionItems(component)) {
+            const ref = item.assetReference || (item.imageUrl || item.signedUrl ? item : null);
+            if (ref) refs.push(ref);
+          }
+          return refs;
+        }
+        if (component.assetReference) refs.push(component.assetReference);
+        return refs;
+      }
+
       /* ---------------- API ---------------- */
+
+      async function loadTemplates() {
+        const select = el('templateSelect');
+        const previous = select.value;
+        select.innerHTML = '<option value="">Auto — no template selected</option>';
+        select.disabled = true;
+
+        try {
+          const response = await fetch(apiBase() + '/flashcards/templates', {
+            headers: {
+              'x-trace-id': uuid(),
+              'x-correlation-id': uuid(),
+            },
+          });
+          const body = await response.json().catch(() => null);
+
+          if (!response.ok) {
+            console.warn('Failed to load templates:', response.status, body);
+            return;
+          }
+
+          for (const tmpl of (body && body.templates) || []) {
+            const option = document.createElement('option');
+            option.value = tmpl.id;
+            const parts = [tmpl.templateType, tmpl.layoutType].filter(Boolean);
+            option.textContent = tmpl.name + (parts.length ? ' (' + parts.join(' · ') + ')' : '');
+            select.appendChild(option);
+          }
+
+          if (previous && Array.from(select.options).some((opt) => opt.value === previous)) {
+            select.value = previous;
+          }
+        } catch (error) {
+          console.warn('Could not load templates:', error.message);
+        } finally {
+          select.disabled = false;
+        }
+      }
 
       async function generate() {
         const query = el('query').value.trim();
         const ageGroup = state.ageGroup;
         const count = Number(el('count').value) || 5;
+        const templateId = el('templateSelect').value;
 
         if (!query || !ageGroup) {
           showBanner('error', '<div>A learning topic and an age group are both required.</div>');
@@ -1422,10 +1673,17 @@
         renderSkeletons(count);
 
         try {
+          const requestBody = { query, ageGroup, count };
+          if (templateId) requestBody.templateId = templateId;
+
           const response = await fetch(apiBase() + '/flashcards/generate', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query, ageGroup, count }),
+            headers: {
+              'Content-Type': 'application/json',
+              'x-trace-id': uuid(),
+              'x-correlation-id': uuid(),
+            },
+            body: JSON.stringify(requestBody),
           });
 
           const body = await response.json().catch(() => null);
@@ -1489,8 +1747,10 @@
         const sources = new Set();
         for (const card of payload.cards || []) {
           for (const component of card.components || []) {
-            const source = imageSourceFor(component.assetReference);
-            if (source) sources.add(source);
+            for (const ref of collectImageRefs(component)) {
+              const source = imageSourceFor(ref);
+              if (source) sources.add(source);
+            }
           }
         }
 
@@ -1524,91 +1784,519 @@
         }
       }
 
-      /* ---------------- template interpretation ---------------- */
 
-      function orderedComponents(card, template) {
-        const hierarchy = Array.isArray(template && template.componentHierarchy)
-          ? template.componentHierarchy
-          : null;
-        const components = (card.components || []).slice();
-        if (!hierarchy) {
-          return components.sort((a, b) => rank(a) - rank(b));
+      /* ---------------- rendering engine ---------------- */
+
+      function layoutDefinitionOf(payload) {
+        return (payload && payload.layoutDefinition) || (payload.template && payload.template.layoutDefinition) || null;
+      }
+
+      function layoutTypeOf(payload) {
+        return ((payload.template && payload.template.layoutType) || 'VERTICAL').toUpperCase();
+      }
+
+      function buildComponentMap(card) {
+        const map = new Map();
+        for (const component of card.components || []) {
+          const id = component.componentId || component.id;
+          if (id) map.set(id, component);
         }
+        return map;
+      }
 
-        const byId = new Map(components.map((c) => [c.componentId, c]));
-        const ordered = [];
-        for (const id of hierarchy) {
-          if (byId.has(id)) {
-            ordered.push(byId.get(id));
-            byId.delete(id);
+      function mergeComponentDef(def, data) {
+        return {
+          componentId: def.id || (data && data.componentId) || '',
+          type: def.type || (data && (data.type || data.componentType)) || 'text',
+          editable: def.editable != null ? def.editable : data && data.editable,
+          required: def.required != null ? def.required : data && data.required,
+          visible: def.visible != null ? def.visible : data ? data.visible : true,
+          constraints: def.constraints || (data && data.constraints) || null,
+          content: data ? contentFromComponent(data) : null,
+          assetReference: data && data.assetReference,
+          metadata: data && data.metadata,
+          options: data && (data.options || data.choices),
+          chips: data && (data.chips || data.categories),
+          items: data && (data.items || data.images || data.collection || data.assetReferences),
+          raw: data || null,
+        };
+      }
+
+      function validateLayout(layoutDef, layoutType) {
+        const issues = [];
+        if (!layoutDef || !Array.isArray(layoutDef.regions) || !layoutDef.regions.length) {
+          issues.push({ kind: 'missing_regions', message: 'layoutDefinition.regions is missing or empty' });
+        }
+        if (!LayoutFactory.has(layoutType)) {
+          issues.push({ kind: 'unknown_layout', message: 'Unsupported layout type: ' + layoutType });
+        }
+        for (const region of (layoutDef && layoutDef.regions) || []) {
+          for (const comp of region.components || []) {
+            const type = (comp.type || '').toLowerCase();
+            if (type && !ComponentFactory.has(type)) {
+              issues.push({ kind: 'unknown_component', message: 'Unsupported component type: ' + type, componentId: comp.id });
+            }
           }
         }
-        return ordered.concat(Array.from(byId.values()));
+        return issues;
       }
 
-      function rank(component) {
-        const index = TEXT_ORDER.indexOf(component.componentType);
-        if (IMAGE_TYPES.has(component.componentType)) return -1;
-        return index === -1 ? TEXT_ORDER.length : index;
+      function renderPlaceholder(label, detail) {
+        const node = document.createElement('div');
+        node.className = 'comp-placeholder';
+        node.textContent = label + (detail ? ': ' + detail : '');
+        return node;
       }
 
-      /**
-       * Normalises whatever component mix a template returns into the slots the
-       * card layouts actually draw. Unknown text types fall through to `extras`
-       * so nothing from the database is silently dropped.
-       */
-      function readCard(card, payload) {
+      function applyRegionStyles(node, region) {
+        if (!region) return;
+        if (region.visibility === false || region.visible === false) {
+          node.classList.add('hidden');
+        }
+        const styles = {};
+        if (region.flex != null) styles.flex = region.flex;
+        if (region.gap != null) styles.gap = typeof region.gap === 'number' ? region.gap + 'cqw' : region.gap;
+        if (region.padding != null) styles.padding = typeof region.padding === 'number' ? region.padding + 'cqw' : region.padding;
+        if (region.background) styles.background = region.background;
+        if (region.border) styles.border = region.border;
+        if (region.alignment) {
+          const parts = String(region.alignment).split(/\s+/);
+          if (parts[0]) styles.justifyContent = parts[0];
+          if (parts[1]) styles.alignItems = parts[1];
+          if (parts.length === 1) styles.alignItems = parts[0];
+        }
+        if (region.orientation === 'horizontal') node.style.flexDirection = 'row';
+        if (region.orientation === 'vertical') node.style.flexDirection = 'column';
+        Object.assign(node.style, styles);
+      }
+
+      function decorateHeaderRegion(regionNode, ctx) {
+        regionNode.classList.add('uno-top');
+        const subjectNode = regionNode.querySelector('[data-component-id="subject"]');
+        if (subjectNode && !subjectNode.classList.contains('uno-cat')) {
+          subjectNode.classList.add('uno-cat');
+        }
+
+        const logo = document.createElement('span');
+        logo.className = 'uno-logo';
+        logo.setAttribute('aria-hidden', 'true');
+        const categoryText = subjectNode ? subjectNode.textContent : '';
+        const marks = /number|count|math|shape/i.test(categoryText) ? ['1', '2', '3'] : ['A', 'B', 'C'];
+        logo.innerHTML = marks.map((m) => '<span>' + m + '</span>').join('');
+        regionNode.appendChild(logo);
+      }
+
+      function decorateFooterRegion(regionNode) {
+        regionNode.classList.add('uno-text');
+      }
+
+      function decorateBodyRegion(regionNode) {
+        regionNode.classList.add('uno-main');
+      }
+
+      function applyRegionDecorations(regionNode, regionDef, ctx) {
+        const regionId = (regionDef.id || '').toLowerCase();
+        if (regionId === 'header') decorateHeaderRegion(regionNode, ctx);
+        else if (regionId === 'body') decorateBodyRegion(regionNode);
+        else if (regionId === 'footer' || regionId === 'bottom') decorateFooterRegion(regionNode);
+      }
+
+      function textClassForComponent(componentId, type) {
+        const id = (componentId || '').toLowerCase();
+        const compType = (type || '').toLowerCase();
+        if (id === 'letter' || id === 'number' || compType === 'letter' || compType === 'number') {
+          return 'uno-hero';
+        }
+        if (id === 'subject') return 'uno-cat';
+        if (['title', 'word', 'caption', 'heading'].includes(id)) return 'u-caption';
+        if (id === 'subtitle') return 'u-subtitle';
+        if (['sentence', 'supportive_text', 'description', 'body'].includes(id)) return 'u-sentence';
+        if (['phonics', 'pronunciation'].includes(id)) return 'u-pron';
+        if (['fact', 'question', 'answer', 'tip'].includes(id)) return 'u-note';
+        if (['badge', 'label'].includes(id) || compType === 'badge') return 'u-badge';
+        if (id === 'footer') return 'u-footer';
+        return 'u-sentence';
+      }
+
+      function isLongText(text, className) {
+        if (className === 'uno-hero') return (text || '').length > 4;
+        if (className === 'u-caption') return (text || '').length > 12;
+        return false;
+      }
+
+      function makeEditable(node, component) {
+        if (!component.editable) return;
+        node.contentEditable = 'true';
+        node.setAttribute('spellcheck', 'true');
+        node.addEventListener('input', () => {
+          if (component.raw) component.raw.content = node.textContent;
+        });
+      }
+
+      function renderTextComponent(def, merged, ctx) {
+        const className = textClassForComponent(merged.componentId, merged.type);
+        const node = document.createElement('div');
+        node.className = className + (isLongText(merged.content, className) ? ' long' : '');
+        node.dataset.componentId = merged.componentId || '';
+        node.textContent = merged.content || '';
+        if (className === 'u-note') {
+          const id = (merged.componentId || '').toLowerCase();
+          const type = (merged.type || '').toLowerCase();
+          if (type === 'question' || id === 'question') node.classList.add('q');
+          const tag = document.createElement('span');
+          tag.className = 'tag';
+          tag.textContent =
+            type === 'question' || id === 'question'
+              ? 'Q'
+              : type === 'answer' || id === 'answer'
+                ? 'A'
+                : type === 'tip' || id === 'tip'
+                  ? 'Tip'
+                  : 'Fact';
+          const body = document.createElement('span');
+          body.textContent = merged.content || '';
+          node.textContent = '';
+          node.append(tag, body);
+        }
+        if (!merged.content && merged.required) {
+          node.textContent = '';
+          node.classList.add('comp-placeholder');
+        }
+        makeEditable(node, merged);
+        return node;
+      }
+
+      function renderImageComponent(def, merged, ctx) {
+        return buildFigure(merged.raw || merged);
+      }
+
+      function renderImageCollectionComponent(def, merged, ctx) {
+        const items = merged.items || collectionItems(merged.raw || {});
+        const layoutType = layoutTypeOf(ctx.payload);
+        const wrap = document.createElement('div');
+        wrap.dataset.componentId = merged.componentId || '';
+
+        if (layoutType === 'GRID') {
+          wrap.className = 'uno-cells quad';
+          items.slice(0, 4).forEach((item, index) => {
+            const component = {
+              componentId: (merged.componentId || 'image') + '_' + (index + 1),
+              assetReference: item.assetReference || (item.imageUrl || item.signedUrl ? item : null),
+              content: item.content || item.caption || null,
+            };
+            const caption = item.caption || item.content || item.label || '';
+            wrap.appendChild(buildCell(component, caption));
+          });
+          return wrap;
+        }
+
+        if (layoutType === 'TWO_COLUMN') {
+          wrap.className = 'uno-cells duo';
+          items.slice(0, 2).forEach((item, index) => {
+            const component = {
+              componentId: (merged.componentId || 'image') + '_' + (index + 1),
+              assetReference: item.assetReference || (item.imageUrl || item.signedUrl ? item : null),
+              content: item.content || item.caption || null,
+            };
+            const caption = item.caption || item.content || item.label || '';
+            wrap.appendChild(buildCell(component, caption));
+          });
+          return wrap;
+        }
+
+        wrap.className = 'uno-cells';
+        wrap.style.flexDirection = 'column';
+        wrap.style.gap = '1.6cqw';
+        items.forEach((item, index) => {
+          const component = {
+            componentId: (merged.componentId || 'image') + '_' + (index + 1),
+            assetReference: item.assetReference || (item.imageUrl || item.signedUrl ? item : null),
+            content: item.content || item.caption || null,
+          };
+          const cell = document.createElement('div');
+          cell.className = 'uno-cell';
+          cell.appendChild(buildFigure(component));
+          const caption = item.caption || item.content || item.label || '';
+          if (caption) {
+            const label = document.createElement('div');
+            label.className = 'cell-label';
+            label.textContent = caption;
+            cell.appendChild(label);
+          }
+          wrap.appendChild(cell);
+        });
+        return wrap;
+      }
+
+      function renderOptionsComponent(def, merged, ctx) {
+        const list = merged.options || [];
+        if (!list.length) {
+          if (merged.content) return renderTextComponent(def, merged, ctx);
+          return renderPlaceholder('Options', merged.componentId);
+        }
+        const wrap = document.createElement('div');
+        wrap.className = 'comp-options';
+        wrap.dataset.componentId = merged.componentId || '';
+        list.forEach((entry, index) => {
+          const row = document.createElement('div');
+          row.className = 'comp-option';
+          row.textContent =
+            typeof entry === 'string'
+              ? String.fromCharCode(65 + index) + '. ' + entry
+              : (entry.label || entry.text || entry.content || entry.value || '');
+          if (merged.editable) {
+            row.contentEditable = 'true';
+          }
+          wrap.appendChild(row);
+        });
+        return wrap;
+      }
+
+      function renderChipsComponent(def, merged, ctx) {
+        const list = merged.chips || (merged.raw && merged.raw.categories) || [];
+        if (!list.length) {
+          if (merged.content) return renderTextComponent(def, merged, ctx);
+          return renderPlaceholder('Chips', merged.componentId);
+        }
+        const wrap = document.createElement('div');
+        wrap.className = 'comp-chips';
+        wrap.dataset.componentId = merged.componentId || '';
+        list.forEach((entry) => {
+          const chip = document.createElement('span');
+          chip.className = 'comp-chip';
+          chip.textContent = typeof entry === 'string' ? entry : entry.label || entry.text || entry.content || '';
+          if (merged.editable) chip.contentEditable = 'true';
+          wrap.appendChild(chip);
+        });
+        return wrap;
+      }
+
+      const ComponentFactory = (() => {
+        const registry = new Map();
+
+        function register(type, renderer) {
+          registry.set(String(type).toLowerCase(), renderer);
+        }
+
+        function has(type) {
+          return registry.has(String(type || '').toLowerCase());
+        }
+
+        function render(def, data, ctx) {
+          const merged = mergeComponentDef(def, data);
+          if (merged.visible === false) return null;
+          const type = (def.type || '').toLowerCase();
+          const renderer = registry.get(type);
+          if (!renderer) {
+            return renderPlaceholder('Unsupported Component', type || def.id);
+          }
+          if (merged.required && !merged.content && !merged.assetReference && !(merged.items && merged.items.length)) {
+            const placeholder = renderPlaceholder('Required', def.id);
+            placeholder.dataset.componentId = def.id || '';
+            return placeholder;
+          }
+          return renderer(def, merged, ctx);
+        }
+
+        register('text', renderTextComponent);
+        register('image', renderImageComponent);
+        register('imagecollection', renderImageCollectionComponent);
+        register('options', renderOptionsComponent);
+        register('chips', renderChipsComponent);
+        register('number', (def, merged, ctx) => renderTextComponent(def, { ...merged, componentId: merged.componentId || 'number' }, ctx));
+        register('letter', (def, merged, ctx) => renderTextComponent(def, { ...merged, componentId: merged.componentId || 'letter' }, ctx));
+        register('badge', (def, merged, ctx) => renderTextComponent(def, { ...merged, componentId: merged.componentId || 'badge', type: 'badge' }, ctx));
+
+        return { register, has, render };
+      })();
+
+      function renderRegion(regionDef, ctx) {
+        const regionNode = document.createElement('div');
+        regionNode.className = 'layout-region';
+        regionNode.dataset.regionId = regionDef.id || '';
+        applyRegionStyles(regionNode, regionDef);
+
+        for (const compDef of regionDef.components || []) {
+          const data = ctx.componentMap.get(compDef.id);
+          const node = ComponentFactory.render(compDef, data, ctx);
+          if (node) regionNode.appendChild(node);
+        }
+
+        applyRegionDecorations(regionNode, regionDef, ctx);
+        return regionNode;
+      }
+
+      function groupRegions(regions) {
+        const byId = new Map();
+        const order = [];
+        for (const region of regions) {
+          byId.set(region.id, region);
+          order.push(region.id);
+        }
+        return { byId, order, all: regions };
+      }
+
+      function verticalLayout(layoutDef, ctx) {
+        const root = document.createElement('div');
+        root.className = 'layout-root layout-vertical';
+        for (const region of layoutDef.regions || []) {
+          root.appendChild(renderRegion(region, ctx));
+        }
+        return root;
+      }
+
+      function horizontalLayout(layoutDef, ctx) {
+        const root = document.createElement('div');
+        root.className = 'layout-root layout-horizontal horizontal';
+        for (const region of layoutDef.regions || []) {
+          root.appendChild(renderRegion(region, ctx));
+        }
+        return root;
+      }
+
+      function twoColumnLayout(layoutDef, ctx) {
+        const root = document.createElement('div');
+        root.className = 'layout-root layout-vertical layout-two-column';
+        const grouped = groupRegions(layoutDef.regions || []);
+        const left = grouped.byId.get('left');
+        const right = grouped.byId.get('right');
+        const row = document.createElement('div');
+        row.className = 'layout-row uno-cells duo';
+        if (left) row.appendChild(renderRegion(left, ctx));
+        if (right) row.appendChild(renderRegion(right, ctx));
+        if (row.childNodes.length) root.appendChild(row);
+        for (const region of layoutDef.regions || []) {
+          if (region.id === 'left' || region.id === 'right') continue;
+          root.appendChild(renderRegion(region, ctx));
+        }
+        return root;
+      }
+
+      function gridLayout(layoutDef, ctx) {
+        const root = document.createElement('div');
+        root.className = 'layout-root layout-vertical layout-grid';
+        for (const region of layoutDef.regions || []) {
+          const regionNode = renderRegion(region, ctx);
+          if ((region.id || '').toLowerCase() === 'body') {
+            const main = document.createElement('div');
+            main.className = 'uno-main';
+            main.appendChild(regionNode);
+            root.appendChild(main);
+          } else {
+            root.appendChild(regionNode);
+          }
+        }
+        return root;
+      }
+
+      function splitLayout(layoutDef, ctx) {
+        const root = document.createElement('div');
+        root.className = 'layout-root layout-vertical layout-split';
+        const grouped = groupRegions(layoutDef.regions || []);
+        const splitIds = new Set(['left', 'right', 'top', 'bottom']);
+        const split = document.createElement('div');
+        split.className = 'layout-split';
+        for (const region of layoutDef.regions || []) {
+          if (splitIds.has(region.id)) split.appendChild(renderRegion(region, ctx));
+        }
+        if (split.childNodes.length) root.appendChild(split);
+        for (const region of layoutDef.regions || []) {
+          if (!splitIds.has(region.id)) root.appendChild(renderRegion(region, ctx));
+        }
+        return root;
+      }
+
+      function overlayLayout(layoutDef, ctx) {
+        const root = document.createElement('div');
+        root.className = 'layout-root layout-vertical layout-overlay';
+        for (const region of layoutDef.regions || []) {
+          const regionNode = renderRegion(region, ctx);
+          const regionId = (region.id || '').toLowerCase();
+          if (regionId === 'overlay') {
+            const bubble = regionNode.querySelector('.uno-hero, .u-caption, [data-component-id]');
+            if (bubble) bubble.classList.add('uno-bubble');
+          }
+          root.appendChild(regionNode);
+        }
+        return root;
+      }
+
+      function unsupportedLayout(layoutDef, ctx, layoutType) {
+        const root = document.createElement('div');
+        root.className = 'layout-root layout-vertical';
+        root.appendChild(renderPlaceholder('Unsupported Layout', layoutType));
+        for (const region of (layoutDef && layoutDef.regions) || []) {
+          root.appendChild(renderRegion(region, ctx));
+        }
+        return root;
+      }
+
+      const LayoutFactory = (() => {
+        const registry = new Map();
+
+        function register(type, renderer) {
+          registry.set(String(type).toUpperCase(), renderer);
+        }
+
+        function has(type) {
+          return registry.has(String(type || 'VERTICAL').toUpperCase());
+        }
+
+        function render(layoutType, layoutDef, card, ctx) {
+          const type = String(layoutType || 'VERTICAL').toUpperCase();
+          const renderer = registry.get(type);
+          if (!renderer) return unsupportedLayout(layoutDef, ctx, type);
+          return renderer(layoutDef, ctx);
+        }
+
+        register('VERTICAL', verticalLayout);
+        register('HORIZONTAL', horizontalLayout);
+        register('TWO_COLUMN', twoColumnLayout);
+        register('GRID', gridLayout);
+        register('SPLIT', splitLayout);
+        register('OVERLAY', overlayLayout);
+
+        return { register, has, render };
+      })();
+
+      function buildRenderContext(card, payload, theme) {
+        return {
+          card,
+          payload,
+          theme,
+          componentMap: buildComponentMap(card),
+        };
+      }
+
+      function categoryFallback(payload) {
         const template = payload.template || {};
         const request = payload.request || {};
-        const components = orderedComponents(card, template);
+        return (
+          template.description ||
+          humanize(template.templateType) ||
+          template.name ||
+          humanize(request.learningObjective) ||
+          'Flash Card'
+        );
+      }
 
-        const slots = {
-          images: [],
-          headline: null,
-          headlineUsed: false,
-          captions: [],
-          usedCaptions: new Set(),
-          subtitle: null,
-          sentences: [],
-          pron: null,
-          notes: [],
-          badge: null,
-          footer: null,
-          extras: [],
-          category: template.name || (request.learningObjective || '').replace(/_/g, ' ') || 'Flash Card',
-          all: components,
-        };
-
-        for (const component of components) {
-          const type = (component.componentType || '').toLowerCase();
-
-          if (IMAGE_TYPES.has(type)) {
-            slots.images.push(component);
-            continue;
-          }
-          if (!component.content) continue;
-
-          if (HEADLINE_TYPES.has(type)) {
-            if (!slots.headline) slots.headline = component;
-            else slots.captions.push(component);
-          } else if (type === 'subtitle') {
-            slots.subtitle = component;
-          } else if (type === 'sentence' || type === 'supportive_text' || type === 'description' || type === 'body') {
-            slots.sentences.push(component);
-          } else if (type === 'pronunciation' || type === 'phonics') {
-            slots.pron = component;
-          } else if (type === 'fact' || type === 'question' || type === 'answer' || type === 'tip') {
-            slots.notes.push(component);
-          } else if (type === 'badge' || type === 'label') {
-            slots.badge = component;
-          } else if (type === 'footer') {
-            slots.footer = component;
-          } else {
-            slots.extras.push(component);
-          }
-        }
-
-        return slots;
+      function ensureSubjectComponent(card, payload, ctx) {
+        const layoutDef = layoutDefinitionOf(payload);
+        const hasSubjectSlot =
+          layoutDef &&
+          layoutDef.regions &&
+          layoutDef.regions.some((region) =>
+            (region.components || []).some((comp) => comp.id === 'subject'),
+          );
+        if (!hasSubjectSlot) return;
+        if (ctx.componentMap.has('subject')) return;
+        ctx.componentMap.set('subject', {
+          componentId: 'subject',
+          type: 'text',
+          componentType: 'text',
+          content: categoryFallback(payload),
+          editable: true,
+        });
       }
 
       function themeFor(card, index, payload) {
@@ -1631,8 +2319,10 @@
 
       function buildCardElement(card, index) {
         const payload = state.payload;
-        const slots = readCard(card, payload);
+        const layoutDef = layoutDefinitionOf(payload);
+        const layoutType = layoutTypeOf(payload);
         const theme = themeFor(card, index, payload);
+        const ctx = buildRenderContext(card, payload, theme);
 
         const root = document.createElement('article');
         root.className = 'uno';
@@ -1648,114 +2338,21 @@
         const sheet = document.createElement('div');
         sheet.className = 'uno-sheet';
 
-        sheet.appendChild(buildHeader(slots));
-        sheet.appendChild(buildMain(slots, card));
-        const text = buildTextStack(slots);
-        if (text) sheet.appendChild(text);
+        ensureSubjectComponent(card, payload, ctx);
+
+        if (!layoutDef || !Array.isArray(layoutDef.regions) || !layoutDef.regions.length) {
+          sheet.appendChild(renderPlaceholder('Missing layoutDefinition'));
+        } else {
+          const issues = validateLayout(layoutDef, layoutType);
+          if (issues.length) {
+            console.warn('Layout validation:', issues);
+          }
+          sheet.appendChild(LayoutFactory.render(layoutType, layoutDef, card, ctx));
+        }
 
         frame.appendChild(sheet);
         root.appendChild(frame);
         return root;
-      }
-
-      function buildHeader(slots) {
-        const top = document.createElement('div');
-        top.className = 'uno-top';
-
-        const cat = document.createElement('span');
-        cat.className = 'uno-cat';
-        cat.textContent = slots.category;
-
-        const logo = document.createElement('span');
-        logo.className = 'uno-logo';
-        logo.setAttribute('aria-hidden', 'true');
-        const marks = /number|count|math|shape/i.test(slots.category) ? ['1', '2', '3'] : ['A', 'B', 'C'];
-        logo.innerHTML = marks.map((m) => '<span>' + m + '</span>').join('');
-
-        top.append(cat, logo);
-        return top;
-      }
-
-      function buildMain(slots, card) {
-        const main = document.createElement('div');
-        main.className = 'uno-main';
-
-        const images = slots.images;
-        const captionText = (component, fallbackIndex) => {
-          const ref = component && component.assetReference;
-          if (ref && ref.caption) return ref.caption;
-          const spare = slots.captions[fallbackIndex];
-          if (spare) {
-            slots.usedCaptions.add(fallbackIndex);
-            return spare.content;
-          }
-          return '';
-        };
-
-        /* 3+ images -> quadrant board with an optional centre bubble */
-        if (images.length >= 3) {
-          const cells = document.createElement('div');
-          cells.className = 'uno-cells quad';
-          images.slice(0, 4).forEach((component, i) => {
-            cells.appendChild(buildCell(component, captionText(component, i)));
-          });
-          main.appendChild(cells);
-
-          if (slots.headline) {
-            const bubble = document.createElement('div');
-            bubble.className = 'uno-bubble';
-            bubble.textContent = slots.headline.content;
-            main.appendChild(bubble);
-            slots.headlineUsed = true;
-          }
-          return main;
-        }
-
-        /* 2 images -> side-by-side, headline promoted to a hero glyph */
-        if (images.length === 2) {
-          if (slots.headline) {
-            const hero = document.createElement('div');
-            hero.className = 'uno-hero' + (slots.headline.content.length > 4 ? ' long' : '');
-            hero.textContent = slots.headline.content;
-            main.appendChild(hero);
-            slots.headlineUsed = true;
-          }
-          const cells = document.createElement('div');
-          cells.className = 'uno-cells duo';
-          images.forEach((component, i) => {
-            cells.appendChild(buildCell(component, captionText(component, i)));
-          });
-          main.appendChild(cells);
-          return main;
-        }
-
-        /* exactly 1 image -> full-bleed figure */
-        if (images.length === 1) {
-          main.appendChild(buildFigure(images[0]));
-          return main;
-        }
-
-        /* no image -> the headline carries the card */
-        if (slots.headline) {
-          const hero = document.createElement('div');
-          hero.className = 'uno-hero' + (slots.headline.content.length > 4 ? ' long' : '');
-          hero.style.margin = 'auto 0';
-          hero.textContent = slots.headline.content;
-          main.appendChild(hero);
-          slots.headlineUsed = true;
-        }
-        return main;
-      }
-
-      /* Counting rows for number templates: "8" / "eight" -> eight dots. */
-      function buildDots(slots) {
-        const source = slots.headline && slots.headline.content;
-        const value = Number(String(source || '').trim());
-        if (!Number.isInteger(value) || value < 1 || value > 10) return null;
-        const wrap = document.createElement('div');
-        wrap.className = 'uno-dots';
-        for (let i = 0; i < value; i += 1) wrap.appendChild(document.createElement('i'));
-        return wrap;
       }
 
       function buildCell(component, caption) {
@@ -1780,10 +2377,9 @@
 
         if (source) {
           const img = document.createElement('img');
-          // crossOrigin only helps once the bytes are readable; setting it on an
-          // opaque response makes the browser discard a successful load.
           if (cached) img.crossOrigin = 'anonymous';
           img.alt = (ref && ref.caption) || component.content || '';
+          img.loading = 'lazy';
           img.src = cached || source;
           figure.appendChild(img);
           return figure;
@@ -1800,90 +2396,6 @@
         figure.appendChild(fallback);
         return figure;
       }
-
-      function buildTextStack(slots) {
-        const stack = document.createElement('div');
-        stack.className = 'uno-text';
-        let filled = 0;
-
-        if (slots.headline && !slots.headlineUsed) {
-          const caption = document.createElement('div');
-          caption.className = 'u-caption' + (slots.headline.content.length > 12 ? ' long' : '');
-          caption.dataset.componentId = slots.headline.componentId || '';
-          caption.textContent = slots.headline.content;
-          stack.appendChild(caption);
-          filled += 1;
-        }
-
-        slots.captions.forEach((caption, index) => {
-          if (slots.usedCaptions.has(index)) return;
-          const node = simple('u-caption' + (caption.content.length > 12 ? ' long' : ''), caption);
-          stack.appendChild(node);
-          filled += 1;
-        });
-
-        if (slots.subtitle) {
-          stack.appendChild(simple('u-subtitle', slots.subtitle));
-          filled += 1;
-        }
-
-        for (const sentence of slots.sentences) {
-          stack.appendChild(simple('u-sentence', sentence));
-          filled += 1;
-        }
-
-        if (slots.pron) {
-          stack.appendChild(simple('u-pron', slots.pron));
-          filled += 1;
-        }
-
-        for (const note of slots.notes) {
-          const type = (note.componentType || '').toLowerCase();
-          const row = document.createElement('div');
-          row.className = 'u-note' + (type === 'question' ? ' q' : '');
-          row.dataset.componentId = note.componentId || '';
-          const tag = document.createElement('span');
-          tag.className = 'tag';
-          tag.textContent = type === 'question' ? 'Q' : type === 'answer' ? 'A' : type === 'tip' ? 'Tip' : 'Fact';
-          const body = document.createElement('span');
-          body.textContent = note.content;
-          row.append(tag, body);
-          stack.appendChild(row);
-          filled += 1;
-        }
-
-        for (const extra of slots.extras) {
-          stack.appendChild(simple('u-sentence', extra));
-          filled += 1;
-        }
-
-        if (slots.badge) {
-          stack.appendChild(simple('u-badge', slots.badge));
-          filled += 1;
-        }
-
-        const dots = buildDots(slots);
-        if (dots) {
-          stack.appendChild(dots);
-          filled += 1;
-        }
-
-        if (slots.footer) {
-          stack.appendChild(simple('u-footer', slots.footer));
-          filled += 1;
-        }
-
-        return filled ? stack : null;
-      }
-
-      function simple(className, component) {
-        const node = document.createElement('div');
-        node.className = className;
-        node.dataset.componentId = component.componentId || '';
-        node.textContent = component.content;
-        return node;
-      }
-
       /* ---------------- grid, summary, pagination ---------------- */
 
       function renderSkeletons(count) {
@@ -1903,11 +2415,14 @@
         const req = payload.request || {};
         const template = payload.template || {};
         const meta = payload.renderingMetadata || {};
+        const templateLabel = template.name
+          ? template.name + ' v' + template.templateVersion + (template.templateType ? ' · ' + humanize(template.templateType) : '')
+          : '';
         const pills = [
           ['Topic', req.topic],
           ['Age', req.ageGroup],
-          ['Objective', (req.learningObjective || '').replace(/_/g, ' ')],
-          ['Template', template.name ? template.name + ' v' + template.templateVersion : ''],
+          ['Objective', humanize(req.learningObjective)],
+          ['Template', templateLabel],
           ['Cards', (payload.cards || []).length],
           ['Model', meta.contentModel],
         ];
@@ -2043,7 +2558,7 @@
           ? payload.template.name + ' - v' + payload.template.templateVersion
           : '';
 
-        const imageRef = ((card.components || []).find((c) => IMAGE_TYPES.has(c.componentType)) || {}).assetReference;
+        const imageRef = (card.components || []).flatMap((c) => collectImageRefs(c))[0];
         const rows = [
           ['Topic', (payload.request || {}).topic],
           ['Age group', (payload.request || {}).ageGroup],
@@ -2059,13 +2574,15 @@
 
         el('modalComps').innerHTML = (card.components || [])
           .map((component) => {
-            const filled = IMAGE_TYPES.has(component.componentType)
-              ? !!(component.assetReference && component.assetReference.assetId)
-              : !!component.content;
+            const type = componentTypeOf(component);
+            const filled =
+              isImageComponent(component) || isImageCollection(component)
+                ? collectImageRefs(component).some((ref) => ref && ref.assetId)
+                : !!contentFromComponent(component);
             return (
               '<div class="comp-row"><span class="dot ' + (filled ? '' : 'blank') + '"></span><code>' +
               escapeHtml(component.componentId) + '</code><span class="type">' +
-              escapeHtml(component.componentType) + (component.editable ? ' - editable' : '') +
+              escapeHtml(type) + (component.editable ? ' - editable' : '') +
               '</span></div>'
             );
           })
@@ -2082,11 +2599,72 @@
 
       /* ---------------- export ---------------- */
 
-      async function renderCardCanvas(index) {
+      function findVisibleCardElement(index) {
+        if (el('modal').classList.contains('show') && state.activeIndex === index) {
+          return el('modalCard').querySelector('.uno');
+        }
+        const localIndex = pagedIndexes().indexOf(index);
+        if (localIndex < 0) return null;
+        const tile = el('grid').querySelectorAll('.tile')[localIndex];
+        return tile ? tile.querySelector('.uno') : null;
+      }
+
+      function defaultExportWidth() {
+        const visible = el('grid').querySelector('.tile .uno') || el('modalCard').querySelector('.uno');
+        if (visible) return Math.round(visible.getBoundingClientRect().width);
+        return 280;
+      }
+
+      function prepareImagesForCanvas(root) {
+        root.querySelectorAll('.uno-figure img').forEach((img) => {
+          const figure = img.closest('.uno-figure');
+          if (!figure) return;
+          const maxW = figure.clientWidth;
+          const maxH = figure.clientHeight;
+          const nw = img.naturalWidth;
+          const nh = img.naturalHeight;
+          if (!maxW || !maxH || !nw || !nh) return;
+          const scale = Math.min(maxW / nw, maxH / nh);
+          const w = Math.max(1, Math.round(nw * scale));
+          const h = Math.max(1, Math.round(nh * scale));
+          img.style.width = w + 'px';
+          img.style.height = h + 'px';
+          img.style.maxWidth = maxW + 'px';
+          img.style.maxHeight = maxH + 'px';
+          img.style.objectFit = 'fill';
+        });
+      }
+
+      function mountExportCardNode(index) {
         const stage = el('exportStage');
         stage.innerHTML = '';
+        const source = findVisibleCardElement(index);
+
+        if (source) {
+          const rect = source.getBoundingClientRect();
+          const node = source.cloneNode(true);
+          node.style.width = rect.width + 'px';
+          node.style.height = rect.height + 'px';
+          node.style.flex = 'none';
+          node.style.boxShadow = 'none';
+          stage.style.width = rect.width + 'px';
+          stage.appendChild(node);
+          return { node, scale: 3 };
+        }
+
+        const width = defaultExportWidth();
         const node = buildCardElement(state.payload.cards[index], index);
+        node.style.width = width + 'px';
+        node.style.flex = 'none';
+        node.style.boxShadow = 'none';
+        stage.style.width = width + 'px';
         stage.appendChild(node);
+        return { node, scale: 3 };
+      }
+
+      async function renderCardCanvas(index) {
+        const stage = el('exportStage');
+        const { node, scale } = mountExportCardNode(index);
 
         if (document.fonts && document.fonts.ready) await document.fonts.ready;
         await Promise.all(
@@ -2100,14 +2678,22 @@
           ),
         );
 
+        prepareImagesForCanvas(node);
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
         const canvas = await html2canvas(node, {
-          scale: 2,
+          scale,
           backgroundColor: '#ffffff',
           useCORS: true,
           allowTaint: false,
           logging: false,
+          width: node.offsetWidth,
+          height: node.offsetHeight,
+          windowWidth: node.offsetWidth,
+          windowHeight: node.offsetHeight,
         });
         stage.innerHTML = '';
+        stage.style.width = '';
         return canvas;
       }
 
@@ -2210,9 +2796,12 @@
       /* ---------------- wiring ---------------- */
 
       el('apiBase').value = defaultApiBase();
+      loadTemplates();
+      el('apiBase').addEventListener('change', loadTemplates);
       el('generateBtn').addEventListener('click', generate);
       el('cancelBtn').addEventListener('click', () => {
         el('query').value = '';
+        el('templateSelect').value = '';
         clearBanners();
         state.payload = null;
         resetResults();

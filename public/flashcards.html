@@ -766,6 +766,7 @@
       }
 
       .uno-cells.quad {
+        position: relative;
         grid-template-columns: 1fr 1fr;
         grid-template-rows: 1fr 1fr;
         gap: 2.4cqw;
@@ -863,6 +864,60 @@
         border-radius: 50%;
         background: var(--frame);
         display: block;
+      }
+
+      /* 2x3 sequence grid (alphabet / number sequences, sight words) */
+      .grid-2x3 {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        grid-auto-rows: 1fr;
+        gap: 2.4cqw;
+        align-content: center;
+      }
+
+      .grid-2x3-cell {
+        display: grid;
+        place-items: center;
+        font-family: 'Baloo 2', sans-serif;
+        font-weight: 800;
+        font-size: 12cqw;
+        color: #33333f;
+        background: var(--tint, #f5f2ff);
+        border-radius: 3cqw;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .grid-2x3-cell.blank {
+        color: var(--frame-ink, var(--primary));
+        border: 0.5cqw dashed var(--frame, var(--primary));
+        background: #fff;
+      }
+
+      /* multi-row image+label pairing (e.g. matching pairs list) */
+      .layout-pair-list {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1.6cqw;
+        overflow: hidden;
+      }
+
+      .layout-pair-row {
+        flex: 1 1 0;
+        min-height: 0;
+      }
+
+      /* blank handwriting box (e.g. counting-objects answer slot) */
+      .u-answerbox {
+        flex: 0 0 auto;
+        min-height: 13cqw;
+        border: 0.6cqw dashed var(--frame);
+        border-radius: 2.4cqw;
+        background: #fff;
       }
 
       /* ---- text stack ---- */
@@ -1442,7 +1497,10 @@
     <div class="toast" id="toast"></div>
 
     <script>
-      const el = (id) => document.getElementById(id);
+      /* Cheap DOM-id memoisation — el() is called very frequently across the
+         app; the underlying node never changes for the life of the page. */
+      const _elCache = Object.create(null);
+      const el = (id) => _elCache[id] || (_elCache[id] = document.getElementById(id));
 
       const state = {
         payload: null,
@@ -1590,6 +1648,7 @@
       }
 
       function contentFromComponent(component) {
+        if (!component) return null;
         if (component.content != null && component.content !== '') return component.content;
         const list = component.options || component.chips || component.categories;
         if (Array.isArray(list) && list.length) {
@@ -1602,6 +1661,29 @@
             .join(' · ');
         }
         return null;
+      }
+
+      /**
+       * Best-effort conversion of a component's content into a list. The API
+       * contract only guarantees `content: string | null`, so list-shaped
+       * components (textCollection etc.) may arrive as JSON, a delimited
+       * string, or (defensively) an already-parsed array.
+       */
+      function parseListContent(raw) {
+        if (raw == null) return [];
+        if (Array.isArray(raw)) return raw;
+        const text = String(raw).trim();
+        if (!text) return [];
+        try {
+          const parsed = JSON.parse(text);
+          if (Array.isArray(parsed)) return parsed;
+        } catch {
+          /* not JSON — fall through to delimiter split */
+        }
+        return text
+          .split(/\r?\n|\s*\|\s*|\s*,\s*/)
+          .map((s) => s.trim())
+          .filter(Boolean);
       }
 
       function collectImageRefs(component) {
@@ -1639,13 +1721,15 @@
             return;
           }
 
+          const fragment = document.createDocumentFragment();
           for (const tmpl of (body && body.templates) || []) {
             const option = document.createElement('option');
             option.value = tmpl.id;
             const parts = [tmpl.templateType, tmpl.layoutType].filter(Boolean);
             option.textContent = tmpl.name + (parts.length ? ' (' + parts.join(' · ') + ')' : '');
-            select.appendChild(option);
+            fragment.appendChild(option);
           }
+          select.appendChild(fragment);
 
           if (previous && Array.from(select.options).some((opt) => opt.value === previous)) {
             select.value = previous;
@@ -1870,17 +1954,26 @@
         Object.assign(node.style, styles);
       }
 
-      function decorateHeaderRegion(regionNode, ctx) {
+      function decorateHeaderRegion(regionNode) {
         regionNode.classList.add('uno-top');
-        const subjectNode = regionNode.querySelector('[data-component-id="subject"]');
-        if (subjectNode && !subjectNode.classList.contains('uno-cat')) {
-          subjectNode.classList.add('uno-cat');
+
+        /* Any single text label in the header (ids vary by template — e.g.
+           'subject' on most cards, 'skillLabel' on phonics cards) gets the
+           standard category-pill styling. */
+        const labelNode = regionNode.querySelector('[data-component-id]');
+        let categoryText = '';
+        if (labelNode) {
+          labelNode.classList.add('uno-cat');
+          categoryText = labelNode.textContent;
         }
 
+        /* The brand mark is always synthesised here rather than rendered
+           from a template-supplied image component (see renderRegion,
+           which skips a 'brandingLogo' component definition), so every
+           template gets an identical, dependency-free logo. */
         const logo = document.createElement('span');
         logo.className = 'uno-logo';
         logo.setAttribute('aria-hidden', 'true');
-        const categoryText = subjectNode ? subjectNode.textContent : '';
         const marks = /number|count|math|shape/i.test(categoryText) ? ['1', '2', '3'] : ['A', 'B', 'C'];
         logo.innerHTML = marks.map((m) => '<span>' + m + '</span>').join('');
         regionNode.appendChild(logo);
@@ -1904,10 +1997,14 @@
       function textClassForComponent(componentId, type) {
         const id = (componentId || '').toLowerCase();
         const compType = (type || '').toLowerCase();
-        if (id === 'letter' || id === 'number' || compType === 'letter' || compType === 'number') {
+        if (id === 'answerbox') return 'u-answerbox';
+        if (
+          ['letter', 'number', 'letterupper', 'letterlower'].includes(id) ||
+          ['letter', 'number'].includes(compType)
+        ) {
           return 'uno-hero';
         }
-        if (id === 'subject') return 'uno-cat';
+        if (id === 'subject' || id === 'skilllabel') return 'uno-cat';
         if (['title', 'word', 'caption', 'heading'].includes(id)) return 'u-caption';
         if (id === 'subtitle') return 'u-subtitle';
         if (['sentence', 'supportive_text', 'description', 'body'].includes(id)) return 'u-sentence';
@@ -1938,6 +2035,14 @@
         const node = document.createElement('div');
         node.className = className + (isLongText(merged.content, className) ? ' long' : '');
         node.dataset.componentId = merged.componentId || '';
+
+        if (className === 'u-answerbox') {
+          /* Blank handwriting slot — must never be pre-filled, even if the
+             API happened to send content for it. */
+          makeEditable(node, merged);
+          return node;
+        }
+
         node.textContent = merged.content || '';
         if (className === 'u-note') {
           const id = (merged.componentId || '').toLowerCase();
@@ -2071,6 +2176,38 @@
         return wrap;
       }
 
+      /**
+       * Renders a `textCollection` component (e.g. digit/number-name pairs)
+       * as a simple vertical list. If the definition declares `pairedWith`,
+       * the paired collection's values are zipped in alongside — that paired
+       * component is *not* rendered separately (see renderRegion).
+       */
+      function renderTextCollectionComponent(def, merged, ctx) {
+        const primary = parseListContent(merged.content);
+        if (!primary.length) return renderPlaceholder('List', merged.componentId);
+
+        let paired = [];
+        if (def.pairedWith) {
+          const pairedData = ctx.componentMap.get(def.pairedWith);
+          paired = parseListContent(pairedData && contentFromComponent(pairedData));
+        }
+
+        const wrap = document.createElement('div');
+        wrap.className = 'uno-cells';
+        wrap.style.flexDirection = 'column';
+        wrap.style.gap = '1cqw';
+        wrap.style.overflow = 'hidden';
+        wrap.dataset.componentId = merged.componentId || '';
+
+        primary.forEach((value, index) => {
+          const row = document.createElement('div');
+          row.className = 'u-sentence';
+          row.textContent = paired[index] != null ? value + ' — ' + paired[index] : String(value);
+          wrap.appendChild(row);
+        });
+        return wrap;
+      }
+
       const ComponentFactory = (() => {
         const registry = new Map();
 
@@ -2090,7 +2227,13 @@
           if (!renderer) {
             return renderPlaceholder('Unsupported Component', type || def.id);
           }
-          if (merged.required && !merged.content && !merged.assetReference && !(merged.items && merged.items.length)) {
+          if (
+            merged.required &&
+            !merged.content &&
+            !merged.assetReference &&
+            !(merged.items && merged.items.length) &&
+            type !== 'text' /* answer-box style blanks are required-but-empty by design */
+          ) {
             const placeholder = renderPlaceholder('Required', def.id);
             placeholder.dataset.componentId = def.id || '';
             return placeholder;
@@ -2101,6 +2244,7 @@
         register('text', renderTextComponent);
         register('image', renderImageComponent);
         register('imagecollection', renderImageCollectionComponent);
+        register('textcollection', renderTextCollectionComponent);
         register('options', renderOptionsComponent);
         register('chips', renderChipsComponent);
         register('number', (def, merged, ctx) => renderTextComponent(def, { ...merged, componentId: merged.componentId || 'number' }, ctx));
@@ -2110,13 +2254,47 @@
         return { register, has, render };
       })();
 
+      /** Builds a single `.uno-cell` (figure + label) from a region's raw
+       * component definitions. Shared by the four-quadrant layout and the
+       * generalised two-column pair-list fallback so both stay in sync. */
+      function renderCellFromRegionComponents(components, ctx) {
+        const cell = document.createElement('div');
+        cell.className = 'uno-cell';
+        for (const compDef of components || []) {
+          const type = (compDef.type || '').toLowerCase();
+          const data = ctx.componentMap.get(compDef.id);
+          const merged = mergeComponentDef(compDef, data);
+          if (merged.visible === false) continue;
+          if (type === 'image') {
+            cell.appendChild(renderImageComponent(compDef, merged, ctx));
+          } else {
+            const label = document.createElement('div');
+            label.className = 'cell-label';
+            label.dataset.componentId = merged.componentId || '';
+            label.textContent = merged.content || '';
+            cell.appendChild(label);
+          }
+        }
+        return cell;
+      }
+
       function renderRegion(regionDef, ctx) {
         const regionNode = document.createElement('div');
         regionNode.className = 'layout-region';
         regionNode.dataset.regionId = regionDef.id || '';
         applyRegionStyles(regionNode, regionDef);
 
+        /* Components consumed inline by a sibling (paired collections, the
+           synthesised brand logo) are skipped here so they aren't rendered
+           twice. */
+        const pairedTargets = new Set(
+          (regionDef.components || []).map((c) => c.pairedWith).filter(Boolean),
+        );
+
         for (const compDef of regionDef.components || []) {
+          const id = (compDef.id || '').toLowerCase();
+          if (id === 'brandinglogo') continue;
+          if (pairedTargets.has(compDef.id)) continue;
           const data = ctx.componentMap.get(compDef.id);
           const node = ComponentFactory.render(compDef, data, ctx);
           if (node) regionNode.appendChild(node);
@@ -2154,21 +2332,41 @@
         return root;
       }
 
+      /**
+       * Handles two distinct TWO_COLUMN shapes:
+       *  - a single left/right split (compare-style templates), or
+       *  - a stacked list of paired rows, one per region (matching-pairs
+       *    style templates), each row rendered image-cell + label-cell.
+       */
       function twoColumnLayout(layoutDef, ctx) {
         const root = document.createElement('div');
         root.className = 'layout-root layout-vertical layout-two-column';
         const grouped = groupRegions(layoutDef.regions || []);
         const left = grouped.byId.get('left');
         const right = grouped.byId.get('right');
-        const row = document.createElement('div');
-        row.className = 'layout-row uno-cells duo';
-        if (left) row.appendChild(renderRegion(left, ctx));
-        if (right) row.appendChild(renderRegion(right, ctx));
-        if (row.childNodes.length) root.appendChild(row);
-        for (const region of layoutDef.regions || []) {
-          if (region.id === 'left' || region.id === 'right') continue;
-          root.appendChild(renderRegion(region, ctx));
+
+        if (left || right) {
+          const row = document.createElement('div');
+          row.className = 'layout-row uno-cells duo';
+          if (left) row.appendChild(renderRegion(left, ctx));
+          if (right) row.appendChild(renderRegion(right, ctx));
+          if (row.childNodes.length) root.appendChild(row);
+          for (const region of layoutDef.regions || []) {
+            if (region.id === 'left' || region.id === 'right') continue;
+            root.appendChild(renderRegion(region, ctx));
+          }
+          return root;
         }
+
+        const list = document.createElement('div');
+        list.className = 'uno-cells layout-pair-list';
+        for (const region of layoutDef.regions || []) {
+          const row = document.createElement('div');
+          row.className = 'uno-cells duo layout-pair-row';
+          row.appendChild(renderCellFromRegionComponents(region.components, ctx));
+          list.appendChild(row);
+        }
+        root.appendChild(list);
         return root;
       }
 
@@ -2189,10 +2387,97 @@
         return root;
       }
 
+      /**
+       * 2-column-by-3-row sequence grid: alphabet / number sequences and
+       * sight-word grids. Every text component in a non-'instruction' region
+       * becomes one grid cell; an empty value renders as a dashed blank.
+       */
+      function grid2x3Layout(layoutDef, ctx) {
+        const root = document.createElement('div');
+        root.className = 'layout-root layout-vertical layout-grid-2x3';
+        const grouped = groupRegions(layoutDef.regions || []);
+
+        for (const region of layoutDef.regions || []) {
+          if (region.id === 'instruction') continue;
+          const main = document.createElement('div');
+          main.className = 'uno-main';
+          const grid = document.createElement('div');
+          grid.className = 'grid-2x3';
+          for (const compDef of region.components || []) {
+            const data = ctx.componentMap.get(compDef.id);
+            const merged = mergeComponentDef(compDef, data);
+            if (merged.visible === false) continue;
+            const cell = document.createElement('div');
+            cell.className = 'grid-2x3-cell' + (merged.content ? '' : ' blank');
+            cell.dataset.componentId = merged.componentId || '';
+            cell.textContent = merged.content || '_';
+            grid.appendChild(cell);
+          }
+          main.appendChild(grid);
+          root.appendChild(main);
+        }
+
+        const instruction = grouped.byId.get('instruction');
+        if (instruction) root.appendChild(renderRegion(instruction, ctx));
+
+        return root;
+      }
+
+      /**
+       * Four quadrants of image+label around a central highlighted bubble
+       * (e.g. the phonics blend cards: four example words around the
+       * target sound). Region ids: header, topLeft, topRight, bottomLeft,
+       * bottomRight, center.
+       */
+      function fourQuadrantLayout(layoutDef, ctx) {
+        const root = document.createElement('div');
+        root.className = 'layout-root layout-vertical layout-four-quadrant';
+        const grouped = groupRegions(layoutDef.regions || []);
+        const quadrantIds = ['topLeft', 'topRight', 'bottomLeft', 'bottomRight'];
+        const consumedIds = new Set(['header', 'center', ...quadrantIds]);
+
+        const header = grouped.byId.get('header');
+        if (header) root.appendChild(renderRegion(header, ctx));
+
+        const body = document.createElement('div');
+        body.className = 'uno-main';
+
+        const quadWrap = document.createElement('div');
+        quadWrap.className = 'uno-cells quad';
+        for (const id of quadrantIds) {
+          const region = grouped.byId.get(id);
+          if (!region) continue;
+          quadWrap.appendChild(renderCellFromRegionComponents(region.components, ctx));
+        }
+        body.appendChild(quadWrap);
+
+        const center = grouped.byId.get('center');
+        if (center) {
+          const bubble = document.createElement('div');
+          bubble.className = 'uno-bubble';
+          for (const compDef of center.components || []) {
+            const data = ctx.componentMap.get(compDef.id);
+            const merged = mergeComponentDef(compDef, data);
+            if (merged.visible === false) continue;
+            bubble.dataset.componentId = merged.componentId || '';
+            bubble.textContent = merged.content || '';
+          }
+          body.appendChild(bubble);
+        }
+
+        root.appendChild(body);
+
+        for (const region of layoutDef.regions || []) {
+          if (consumedIds.has(region.id)) continue;
+          root.appendChild(renderRegion(region, ctx));
+        }
+
+        return root;
+      }
+
       function splitLayout(layoutDef, ctx) {
         const root = document.createElement('div');
         root.className = 'layout-root layout-vertical layout-split';
-        const grouped = groupRegions(layoutDef.regions || []);
         const splitIds = new Set(['left', 'right', 'top', 'bottom']);
         const split = document.createElement('div');
         split.className = 'layout-split';
@@ -2253,6 +2538,9 @@
         register('HORIZONTAL', horizontalLayout);
         register('TWO_COLUMN', twoColumnLayout);
         register('GRID', gridLayout);
+        register('GRID_2X3', grid2x3Layout);
+        register('FOUR_QUADRANT_CENTER', fourQuadrantLayout);
+        register('STACKED', verticalLayout);
         register('SPLIT', splitLayout);
         register('OVERLAY', overlayLayout);
 
@@ -2318,6 +2606,15 @@
       /* ---------------- card rendering ---------------- */
 
       function buildCardElement(card, index) {
+        try {
+          return buildCardElementInner(card, index);
+        } catch (error) {
+          console.error('Failed to render card', index, error);
+          return buildErrorCardElement(index, error);
+        }
+      }
+
+      function buildCardElementInner(card, index) {
         const payload = state.payload;
         const layoutDef = layoutDefinitionOf(payload);
         const layoutType = layoutTypeOf(payload);
@@ -2350,6 +2647,26 @@
           sheet.appendChild(LayoutFactory.render(layoutType, layoutDef, card, ctx));
         }
 
+        frame.appendChild(sheet);
+        root.appendChild(frame);
+        return root;
+      }
+
+      /** A single malformed card should never take the whole grid down. */
+      function buildErrorCardElement(index, error) {
+        const root = document.createElement('article');
+        root.className = 'uno';
+        root.style.setProperty('--frame', '#d7d3e6');
+        root.style.setProperty('--frame-ink', '#4b3b73');
+        root.style.setProperty('--tint', '#f3f1fd');
+        root.style.setProperty('--dash', 'rgba(255,255,255,.9)');
+        root.style.setProperty('--bubble', '#4c1d95');
+
+        const frame = document.createElement('div');
+        frame.className = 'uno-frame';
+        const sheet = document.createElement('div');
+        sheet.className = 'uno-sheet';
+        sheet.appendChild(renderPlaceholder('Could not render card', 'card ' + (index + 1)));
         frame.appendChild(sheet);
         root.appendChild(frame);
         return root;
@@ -2403,18 +2720,20 @@
         el('summary').classList.remove('show');
         el('pager').innerHTML = '';
         const grid = el('grid');
-        grid.innerHTML = '';
+        const fragment = document.createDocumentFragment();
         for (let i = 0; i < count; i += 1) {
           const node = document.createElement('div');
           node.className = 'skeleton';
-          grid.appendChild(node);
+          fragment.appendChild(node);
         }
+        grid.innerHTML = '';
+        grid.appendChild(fragment);
       }
 
       function renderSummary(payload) {
         const req = payload.request || {};
         const template = payload.template || {};
-        const meta = payload.renderingMetadata || {};
+        const meta = payload.metadata || payload.renderingMetadata || {};
         const templateLabel = template.name
           ? template.name + ' v' + template.templateVersion + (template.templateType ? ' · ' + humanize(template.templateType) : '')
           : '';
@@ -2443,13 +2762,15 @@
       function renderGrid() {
         const payload = state.payload;
         const grid = el('grid');
-        grid.innerHTML = '';
         const total = (payload && payload.cards.length) || 0;
         el('empty').style.display = total ? 'none' : 'block';
 
+        const fragment = document.createDocumentFragment();
         pagedIndexes().forEach((index) => {
-          grid.appendChild(buildTile(payload.cards[index], index));
+          fragment.appendChild(buildTile(payload.cards[index], index));
         });
+        grid.innerHTML = '';
+        grid.appendChild(fragment);
 
         renderPager(total);
       }

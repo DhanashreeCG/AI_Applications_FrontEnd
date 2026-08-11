@@ -897,6 +897,118 @@
         background: #fff;
       }
 
+      /* ---- Schema-driven grid regions (layout.type === "grid") ----
+         Isolated under .layout-schema so other template types stay untouched. */
+
+      .layout-schema .layout-region[data-region-id='header'],
+      .layout-schema .schema-header {
+        justify-content: space-between;
+        width: 100%;
+      }
+
+      .schema-grid {
+        flex: 1 1 auto;
+        min-height: 0;
+        width: 100%;
+        display: grid;
+        gap: 1.8cqw;
+        align-content: stretch;
+      }
+
+      .schema-grid-cell {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.6cqw;
+        min-height: 0;
+        overflow: hidden;
+        padding: 0.8cqw;
+      }
+
+      .schema-grid-cell.empty {
+        visibility: hidden;
+        pointer-events: none;
+      }
+
+      .schema-badge {
+        display: grid;
+        place-items: center;
+        width: 100%;
+        max-width: 14cqw;
+        aspect-ratio: 1;
+        border-radius: 50%;
+        background: var(--tint, #f5f2ff);
+        font-family: 'Baloo 2', sans-serif;
+        font-weight: 800;
+        font-size: 5.8cqw;
+        line-height: 1;
+        color: #33333f;
+      }
+
+      .schema-badge.dense {
+        max-width: 10cqw;
+        font-size: 4.2cqw;
+      }
+
+      .schema-badge.blank,
+      .schema-blank {
+        width: 100%;
+        max-width: 14cqw;
+        aspect-ratio: 1;
+        border-radius: 50%;
+        border: 0.45cqw dashed var(--frame, var(--primary));
+        background: #fff;
+        color: var(--frame-ink, var(--primary));
+        display: grid;
+        place-items: center;
+        font-family: 'Baloo 2', sans-serif;
+        font-weight: 800;
+        font-size: 6cqw;
+      }
+
+      .schema-plain {
+        font-family: 'Baloo 2', sans-serif;
+        font-weight: 800;
+        font-size: 7.2cqw;
+        line-height: 1.1;
+        color: #33333f;
+        text-align: center;
+        text-wrap: balance;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .schema-plain.compact {
+        font-size: 5.6cqw;
+      }
+
+      .schema-plain.tiny {
+        font-size: 4.4cqw;
+      }
+
+      .schema-plain.sub {
+        font-weight: 700;
+        font-size: 3.6cqw;
+        color: #4e4a63;
+      }
+
+      .schema-plain.blank {
+        width: 80%;
+        min-height: 4cqw;
+        border: none;
+        border-bottom: 0.55cqw dashed var(--frame, var(--primary));
+        border-radius: 0;
+        background: transparent;
+        color: transparent;
+      }
+
+      .layout-schema .schema-grid-cell:has(> .schema-plain:first-child:not(.sub)):not(:has(.schema-badge)) {
+        background: var(--tint, #f5f2ff);
+        border-radius: 2.4cqw;
+      }
+
       /* multi-row image+label pairing (e.g. matching pairs list) */
       .layout-pair-list {
         flex: 1 1 auto;
@@ -1877,8 +1989,31 @@
 
       /* ---------------- rendering engine ---------------- */
 
-      function layoutDefinitionOf(payload) {
-        return (payload && payload.layoutDefinition) || (payload.template && payload.template.layoutDefinition) || null;
+      function layoutDefinitionOf(payload, card) {
+        if (card && Array.isArray(card.regions) && card.regions.length) {
+          return {
+            skillId: card.skillId || (payload && payload.skillId) || null,
+            regions: card.regions,
+          };
+        }
+        const base =
+          (payload && payload.layoutDefinition) || (payload.template && payload.template.layoutDefinition) || null;
+        if (!base || !card) return base;
+
+        const pageLayout = card.layout || card.pageLayout || card.gridLayout || null;
+        if (!pageLayout || (!pageLayout.rows && !pageLayout.cols && !pageLayout.cells && !pageLayout.selected)) {
+          return base;
+        }
+
+        return {
+          skillId: base.skillId || card.skillId || null,
+          regions: (base.regions || []).map((region) => {
+            if (!isSchemaGridRegion(region)) return region;
+            return Object.assign({}, region, {
+              layout: Object.assign({}, region.layout || {}, pageLayout),
+            });
+          }),
+        };
       }
 
       function layoutTypeOf(payload) {
@@ -1891,7 +2026,213 @@
           const id = component.componentId || component.id;
           if (id) map.set(id, component);
         }
+        for (const region of card.regions || []) {
+          for (const comp of region.components || []) {
+            const id = comp.componentId || comp.id;
+            if (!id || isPatternComponentId(id)) continue;
+            if (!map.has(id)) map.set(id, comp);
+          }
+        }
         return map;
+      }
+
+      function isPatternComponentId(id) {
+        return typeof id === 'string' && /\{x\}/i.test(id);
+      }
+
+      function patternIdPrefix(id) {
+        return String(id || '').replace(/\{x\}.*/i, '');
+      }
+
+      function isSchemaGridRegion(regionDef) {
+        return !!(regionDef && regionDef.layout && String(regionDef.layout.type || '').toLowerCase() === 'grid');
+      }
+
+      function layoutHasSchemaGrid(layoutDef) {
+        return ((layoutDef && layoutDef.regions) || []).some(isSchemaGridRegion);
+      }
+
+      function isBlankFillContent(value) {
+        if (value == null) return true;
+        const text = String(value).trim();
+        if (!text) return true;
+        return /^(_+|___+|…|\.\.\.|blank)$/i.test(text);
+      }
+
+      function slotIndexFromId(id) {
+        const match = String(id || '').match(/-(\d+)$/);
+        return match ? Number(match[1]) : null;
+      }
+
+      function semanticRoleOf(def, data) {
+        return String(
+          (def && def.semanticRole) ||
+            (data && (data.semanticRole || (data.metadata && data.metadata.semanticRole))) ||
+            '',
+        );
+      }
+
+      function shouldRenderAsBadge(def, data, content) {
+        const role = semanticRoleOf(def, data);
+        if (/sightwords/i.test(role)) return false;
+        if (/\.reading\.item$/i.test(role)) return false;
+        if (/\.sequence\.item$/i.test(role)) return true;
+        if (/\.digit\.item$/i.test(role)) return true;
+        const text = String(content == null ? '' : content).trim();
+        return /^\d+$/.test(text);
+      }
+
+      /**
+       * Expand a layout component def that uses `foo-{x}` against concrete
+       * card components (`foo-1`, `foo-2`, …). Non-pattern defs are returned
+       * as a single entry (content from map or inline on the def).
+       */
+      function resolvePatternComponents(compDef, componentMap) {
+        const defId = compDef && (compDef.id || compDef.componentId);
+        if (!defId) return [];
+
+        if (!isPatternComponentId(defId)) {
+          const data = componentMap.get(defId) || (compDef.content != null || compDef.assetReference ? compDef : null);
+          return [{ def: compDef, data: data || null, index: slotIndexFromId(defId), id: defId }];
+        }
+
+        const prefix = patternIdPrefix(defId).toLowerCase();
+        const matches = [];
+        for (const [id, data] of componentMap.entries()) {
+          const lower = String(id).toLowerCase();
+          if (!lower.startsWith(prefix)) continue;
+          const suffix = lower.slice(prefix.length);
+          if (!/^\d+$/.test(suffix)) continue;
+          matches.push({
+            def: Object.assign({}, compDef, { id: String(id) }),
+            data,
+            index: Number(suffix),
+            id: String(id),
+          });
+        }
+        matches.sort((a, b) => a.index - b.index);
+        return matches;
+      }
+
+      /**
+       * Resolve every component for a region without inventing/dropping/reordering
+       * field groups. Pattern defs expand in def order; concrete defs stay put.
+       */
+      function resolveRegionComponentEntries(regionDef, componentMap) {
+        const entries = [];
+        const seen = new Set();
+        for (const compDef of (regionDef && regionDef.components) || []) {
+          const id = (compDef.id || compDef.componentId || '').toLowerCase();
+          if (!id || id === 'brandinglogo') continue;
+          for (const entry of resolvePatternComponents(compDef, componentMap)) {
+            const key = String(entry.id).toLowerCase();
+            if (seen.has(key)) continue;
+            seen.add(key);
+            entries.push(entry);
+          }
+        }
+        return entries;
+      }
+
+      /**
+       * Group by trailing numeric suffix so number-3 + reading-3 share one cell.
+       * Within a cell, preserve components-array order.
+       */
+      function groupEntriesIntoGridSlots(entries) {
+        const slots = new Map();
+        for (const entry of entries) {
+          const index = entry.index != null ? entry.index : slotIndexFromId(entry.id);
+          if (index == null) continue;
+          if (!slots.has(index)) slots.set(index, []);
+          slots.get(index).push(entry);
+        }
+        return Array.from(slots.keys())
+          .sort((a, b) => a - b)
+          .map((index) => ({ index, items: slots.get(index) }));
+      }
+
+      function resolveSchemaGridDims(regionDef, slotCount) {
+        const layout = (regionDef && regionDef.layout) || {};
+        if (layout.rows != null && layout.cols != null) {
+          return { rows: Number(layout.rows), cols: Number(layout.cols) };
+        }
+        if (layout.cells != null && layout.cols != null) {
+          const cols = Number(layout.cols);
+          return { cols, rows: Math.ceil(Number(layout.cells) / cols) };
+        }
+
+        const options = Array.isArray(layout.options) ? layout.options : [];
+        const byName = new Map(options.map((opt) => [String(opt.name || '').toUpperCase(), opt]));
+        const selected = String(layout.selected || layout.active || layout.name || layout.default || '').toUpperCase();
+        if (selected && byName.has(selected)) {
+          const opt = byName.get(selected);
+          return { rows: Number(opt.rows), cols: Number(opt.cols) };
+        }
+        for (const opt of options) {
+          if (Number(opt.cells) === slotCount) {
+            return { rows: Number(opt.rows), cols: Number(opt.cols) };
+          }
+        }
+
+        const bounds = layout.dimensionBounds;
+        const n = Math.max(0, slotCount || Number(layout.cells) || 0);
+        if (bounds && n > 0) {
+          const minRows = Number((bounds.min && bounds.min.rows) || 5);
+          const maxRows = Number((bounds.max && bounds.max.rows) || 10);
+          const minCols = Number((bounds.min && bounds.min.cols) || 2);
+          const maxCols = Number((bounds.max && bounds.max.cols) || 5);
+          if (n % 5 === 0) {
+            const rows = n / 5;
+            if (rows >= minRows && rows <= maxRows) return { cols: 5, rows };
+          }
+          for (let cols = minCols; cols <= maxCols; cols += 1) {
+            if (n % cols !== 0) continue;
+            const rows = n / cols;
+            if (rows >= minRows && rows <= maxRows) return { cols, rows };
+          }
+        }
+
+        /* Last resort: infer a compact grid from the payload's own item count. */
+        const count = Math.max(1, n || 1);
+        const cols = Math.min(5, Math.max(1, Number(layout.cols) || Math.ceil(Math.sqrt(count))));
+        return { cols, rows: Math.ceil(count / cols) };
+      }
+
+      function expectedSchemaSlotCount(regionDef, dims, slotCount) {
+        const capacity = dims.rows * dims.cols;
+        const layout = (regionDef && regionDef.layout) || {};
+        if (layout.cells != null) return Number(layout.cells);
+
+        const range = regionDef && regionDef.range;
+        if (range) {
+          const start = range.start != null && typeof range.start === 'object' ? range.start.default : range.default && range.default.start;
+          const end = range.end != null && typeof range.end === 'object' ? range.end.default : range.default && range.default.end;
+          const s = Number(range.default && range.default.start != null ? range.default.start : start);
+          const e = Number(range.default && range.default.end != null ? range.default.end : end);
+          if (!Number.isNaN(s) && !Number.isNaN(e) && e >= s) {
+            const count = e - s + 1;
+            if (range.maxCount != null) return Math.min(count, Number(range.maxCount), capacity);
+            return Math.min(count, capacity);
+          }
+        }
+
+        /* Partial last page / sparse fill: expected equals provided when under capacity. */
+        if (slotCount > 0 && slotCount < capacity) return slotCount;
+        return capacity;
+      }
+
+      function validateSchemaGridContract(regionDef, dims, slotCount) {
+        const expected = expectedSchemaSlotCount(regionDef, dims, slotCount);
+        const capacity = dims.rows * dims.cols;
+        if (slotCount === expected || (slotCount < capacity && slotCount === expected)) return;
+        console.warn('[rendering-contract] grid slot count mismatch', {
+          regionId: regionDef && regionDef.id,
+          rows: dims.rows,
+          cols: dims.cols,
+          capacity,
+          expected,
+          actual: slotCount,
+        });
       }
 
       function mergeComponentDef(def, data) {
@@ -1912,12 +2253,12 @@
         };
       }
 
-      function validateLayout(layoutDef, layoutType) {
+      function validateLayout(layoutDef, layoutType, payload) {
         const issues = [];
         if (!layoutDef || !Array.isArray(layoutDef.regions) || !layoutDef.regions.length) {
           issues.push({ kind: 'missing_regions', message: 'layoutDefinition.regions is missing or empty' });
         }
-        if (!LayoutFactory.has(layoutType)) {
+        if (!layoutHasSchemaGrid(layoutDef) && !LayoutFactory.has(layoutType)) {
           issues.push({ kind: 'unknown_layout', message: 'Unsupported layout type: ' + layoutType });
         }
         for (const region of (layoutDef && layoutDef.regions) || []) {
@@ -2284,7 +2625,94 @@
         return cell;
       }
 
+      function renderSchemaGridItem(entry, ctx, options) {
+        const merged = mergeComponentDef(entry.def, entry.data);
+        if (merged.visible === false) return null;
+
+        const blank = isBlankFillContent(merged.content);
+        const asBadge = shouldRenderAsBadge(entry.def, entry.data, merged.content);
+        const node = document.createElement('div');
+        node.dataset.componentId = merged.componentId || entry.id || '';
+
+        if (blank) {
+          node.className = asBadge ? 'schema-badge blank' : 'schema-plain blank';
+          node.textContent = asBadge ? '' : '';
+          if (asBadge) node.setAttribute('aria-label', 'blank');
+          makeEditable(node, merged);
+          return node;
+        }
+
+        const text = String(merged.content || '');
+        if (asBadge) {
+          node.className = 'schema-badge' + (options && options.dense ? ' dense' : '');
+          node.textContent = text;
+        } else {
+          const role = semanticRoleOf(entry.def, entry.data);
+          const isSub = /\.reading\.item$/i.test(role) || (options && options.stacked && options.indexInCell > 0);
+          node.className =
+            'schema-plain' +
+            (isSub ? ' sub' : '') +
+            (!isSub && text.length > 8 ? ' tiny' : !isSub && text.length > 5 ? ' compact' : '');
+          node.textContent = text;
+        }
+        makeEditable(node, merged);
+        return node;
+      }
+
+      function renderSchemaGridRegion(regionDef, ctx) {
+        const regionNode = document.createElement('div');
+        regionNode.className = 'layout-region schema-grid-region';
+        regionNode.dataset.regionId = regionDef.id || '';
+        applyRegionStyles(regionNode, regionDef);
+
+        const entries = resolveRegionComponentEntries(regionDef, ctx.componentMap);
+        const slots = groupEntriesIntoGridSlots(entries);
+        const dims = resolveSchemaGridDims(regionDef, slots.length);
+        const capacity = Math.max(1, dims.rows * dims.cols);
+
+        validateSchemaGridContract(regionDef, dims, slots.length);
+
+        const main = document.createElement('div');
+        main.className = 'uno-main';
+        const grid = document.createElement('div');
+        grid.className = 'schema-grid';
+        grid.style.gridTemplateColumns = 'repeat(' + dims.cols + ', 1fr)';
+        grid.style.gridTemplateRows = 'repeat(' + dims.rows + ', 1fr)';
+
+        const dense = capacity > 30 || dims.cols >= 5;
+
+        for (let i = 0; i < capacity; i += 1) {
+          const slot = slots[i];
+          const cell = document.createElement('div');
+          if (!slot || !slot.items.length) {
+            cell.className = 'schema-grid-cell empty';
+            grid.appendChild(cell);
+            continue;
+          }
+
+          cell.className = 'schema-grid-cell';
+          cell.dataset.slotIndex = String(slot.index);
+          slot.items.forEach((entry, indexInCell) => {
+            const node = renderSchemaGridItem(entry, ctx, {
+              dense,
+              stacked: slot.items.length > 1,
+              indexInCell,
+            });
+            if (node) cell.appendChild(node);
+          });
+          grid.appendChild(cell);
+        }
+
+        main.appendChild(grid);
+        regionNode.appendChild(main);
+        return regionNode;
+      }
+
       function renderRegion(regionDef, ctx) {
+        if (isSchemaGridRegion(regionDef)) {
+          return renderSchemaGridRegion(regionDef, ctx);
+        }
+
         const regionNode = document.createElement('div');
         regionNode.className = 'layout-region';
         regionNode.dataset.regionId = regionDef.id || '';
@@ -2522,6 +2950,21 @@
         return root;
       }
 
+      /**
+       * Schema-driven renderer for CMS payloads whose regions use
+       * layout.type === "grid" (and a standard header). Region order from the
+       * payload is preserved; no per-template branching.
+       */
+      function schemaDrivenLayout(layoutDef, ctx) {
+        const root = document.createElement('div');
+        root.className = 'layout-root layout-vertical layout-schema';
+        if (layoutDef && layoutDef.skillId) root.dataset.skillId = layoutDef.skillId;
+        for (const region of (layoutDef && layoutDef.regions) || []) {
+          root.appendChild(renderRegion(region, ctx));
+        }
+        return root;
+      }
+
       const LayoutFactory = (() => {
         const registry = new Map();
 
@@ -2534,6 +2977,9 @@
         }
 
         function render(layoutType, layoutDef, card, ctx) {
+          if (layoutHasSchemaGrid(layoutDef)) {
+            return schemaDrivenLayout(layoutDef, ctx);
+          }
           const type = String(layoutType || 'VERTICAL').toUpperCase();
           const renderer = registry.get(type);
           if (!renderer) return unsupportedLayout(layoutDef, ctx, type);
@@ -2575,7 +3021,7 @@
       }
 
       function ensureSubjectComponent(card, payload, ctx) {
-        const layoutDef = layoutDefinitionOf(payload);
+        const layoutDef = layoutDefinitionOf(payload, card);
         const hasSubjectSlot =
           layoutDef &&
           layoutDef.regions &&
@@ -2622,7 +3068,7 @@
 
       function buildCardElementInner(card, index) {
         const payload = state.payload;
-        const layoutDef = layoutDefinitionOf(payload);
+        const layoutDef = layoutDefinitionOf(payload, card);
         const layoutType = layoutTypeOf(payload);
         const theme = themeFor(card, index, payload);
         const ctx = buildRenderContext(card, payload, theme);
@@ -2646,7 +3092,7 @@
         if (!layoutDef || !Array.isArray(layoutDef.regions) || !layoutDef.regions.length) {
           sheet.appendChild(renderPlaceholder('Missing layoutDefinition'));
         } else {
-          const issues = validateLayout(layoutDef, layoutType);
+          const issues = validateLayout(layoutDef, layoutType, payload);
           if (issues.length) {
             console.warn('Layout validation:', issues);
           }

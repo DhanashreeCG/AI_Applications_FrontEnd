@@ -10,6 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;600;700;800&display=swap"
       rel="stylesheet"
     />
+    <script src="env-config.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
@@ -1563,16 +1564,9 @@
         return (el('apiBase').value || defaultApiBase()).replace(/\/+$/, '');
       }
 
-      async function configuredApiBase() {
-        if (!location.protocol.startsWith('http')) return '';
-        try {
-          const response = await fetch('/api/config', { cache: 'no-store' });
-          if (!response.ok) return '';
-          const config = await response.json();
-          return typeof config.apiBaseUrl === 'string' ? config.apiBaseUrl.trim().replace(/\/+$/, '') : '';
-        } catch (error) {
-          return '';
-        }
+      function configuredApiBase() {
+        const url = (window.__ENV__ && window.__ENV__.API_URL) || '';
+        return String(url).trim().replace(/\/+$/, '');
       }
 
       function toast(html, ms = 2600) {
@@ -3128,11 +3122,8 @@
 
       /* ---------------- wiring ---------------- */
 
-      el('apiBase').value = defaultApiBase();
-      configuredApiBase().then((url) => {
-        if (url) el('apiBase').value = url;
-        loadTemplates();
-      });
+      el('apiBase').value = configuredApiBase() || defaultApiBase();
+      loadTemplates();
       el('apiBase').addEventListener('change', loadTemplates);
       el('generateBtn').addEventListener('click', generate);
       el('cancelBtn').addEventListener('click', () => {

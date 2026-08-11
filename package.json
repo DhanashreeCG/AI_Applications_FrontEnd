@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "node scripts/generate-env-config.mjs && next dev",
+    "build": "node scripts/generate-env-config.mjs && next build",
+    "start": "npx --yes serve out -l 4000",
     "lint": "eslint ."
   },
   "dependencies": {

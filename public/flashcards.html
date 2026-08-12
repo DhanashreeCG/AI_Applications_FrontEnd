@@ -1009,6 +1009,49 @@
         border-radius: 2.4cqw;
       }
 
+      /* Sight-words grid only: even outer margin + true center in the card body */
+      .layout-schema .schema-grid-region--words {
+        flex: 1 1 auto;
+        min-height: 0;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .layout-schema .schema-grid-region--words .uno-main {
+        flex: 1 1 auto;
+        min-height: 0;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .layout-schema .schema-grid--words {
+        flex: 0 1 auto;
+        width: 100%;
+        height: auto;
+        max-height: 100%;
+        box-sizing: border-box;
+        padding: 4cqw;
+        gap: 3.2cqw;
+        align-content: center;
+        justify-content: center;
+        align-items: stretch;
+        justify-items: stretch;
+      }
+
+      .layout-schema .schema-grid--words .schema-grid-cell {
+        padding: 2.4cqw 2cqw;
+        min-height: 16cqw;
+      }
+
+      .layout-schema .schema-grid--words .schema-plain {
+        width: 100%;
+        display: grid;
+        place-items: center;
+      }
+
       /* multi-row image+label pairing (e.g. matching pairs list) */
       .layout-pair-list {
         flex: 1 1 auto;
@@ -2625,6 +2668,17 @@
         return cell;
       }
 
+      function isSightWordsSchemaGrid(regionDef, entries) {
+        const sample = (entries && entries[0]) || ((regionDef && regionDef.components) || [])[0];
+        if (!sample) {
+          return String((regionDef && regionDef.id) || '').toLowerCase() === 'grid';
+        }
+        const role = semanticRoleOf(sample.def || sample, sample.data || sample);
+        if (/sightwords/i.test(role)) return true;
+        const id = String((sample.id || sample.def && sample.def.id || sample.componentId || '')).toLowerCase();
+        return /^word-/.test(id) || id === 'word-{x}';
+      }
+
       function renderSchemaGridItem(entry, ctx, options) {
         const merged = mergeComponentDef(entry.def, entry.data);
         if (merged.visible === false) return null;
@@ -2669,15 +2723,22 @@
         const slots = groupEntriesIntoGridSlots(entries);
         const dims = resolveSchemaGridDims(regionDef, slots.length);
         const capacity = Math.max(1, dims.rows * dims.cols);
+        const isWords = isSightWordsSchemaGrid(regionDef, entries);
 
         validateSchemaGridContract(regionDef, dims, slots.length);
+
+        if (isWords) regionNode.classList.add('schema-grid-region--words');
 
         const main = document.createElement('div');
         main.className = 'uno-main';
         const grid = document.createElement('div');
-        grid.className = 'schema-grid';
+        grid.className = 'schema-grid' + (isWords ? ' schema-grid--words' : '');
         grid.style.gridTemplateColumns = 'repeat(' + dims.cols + ', 1fr)';
-        grid.style.gridTemplateRows = 'repeat(' + dims.rows + ', 1fr)';
+        /* Sight words: content-sized rows so the block can center in the card.
+           Number / read-numbers grids keep equal 1fr rows to fill the body. */
+        grid.style.gridTemplateRows = isWords
+          ? 'repeat(' + dims.rows + ', minmax(16cqw, auto))'
+          : 'repeat(' + dims.rows + ', 1fr)';
 
         const dense = capacity > 30 || dims.cols >= 5;
 

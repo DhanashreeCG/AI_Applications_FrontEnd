@@ -1041,9 +1041,24 @@
         justify-items: stretch;
       }
 
+      .layout-schema .schema-grid--words-fill {
+        flex: 1 1 auto;
+        height: 100%;
+        align-content: stretch;
+      }
+
+      .layout-schema .schema-grid--words-strip {
+        flex: 0 1 auto;
+        height: auto;
+      }
+
       .layout-schema .schema-grid--words .schema-grid-cell {
         padding: 2.4cqw 2cqw;
         min-height: 16cqw;
+      }
+
+      .layout-schema .schema-grid--words-fill .schema-grid-cell {
+        min-height: 0;
       }
 
       .layout-schema .schema-grid--words .schema-plain {
@@ -2194,26 +2209,106 @@
           .map((index) => ({ index, items: slots.get(index) }));
       }
 
-      function resolveSchemaGridDims(regionDef, slotCount) {
+      /**
+       * Normalize a layout option so rows*cols === cells.
+       * Some CMS options ship inconsistent geometry (e.g. GRID_4X1 with
+       * rows:1, cols:1, cells:4) — recover a usable grid from name + cells.
+       */
+      function normalizeGridOption(opt) {
+        if (!opt) return null;
+        let rows = Number(opt.rows);
+        let cols = Number(opt.cols);
+        const cells = Number(opt.cells);
+        const name = String(opt.name || '');
+        const nameMatch = name.match(/GRID_(\d+)X(\d+)/i);
+
+        if (rows > 0 && cols > 0 && (!cells || rows * cols === cells)) {
+          return { rows, cols, cells: cells || rows * cols, name };
+        }
+
+        if (nameMatch) {
+          const a = Number(nameMatch[1]);
+          const b = Number(nameMatch[2]);
+          const product = a * b;
+          if (product > 0 && (!cells || product === cells)) {
+            /* Prefer orientation that matches any valid provided dim. */
+            if (cols === b && rows === a) return { rows: a, cols: b, cells: cells || product, name };
+            if (cols === a && rows === b) return { rows: b, cols: a, cells: cells || product, name };
+            /* Single-axis names (4x1 / 1x4): lay out as one row of N words. */
+            if (Math.min(a, b) === 1) {
+              const n = cells || Math.max(a, b);
+              return { rows: 1, cols: n, cells: n, name };
+            }
+            /* GRID_3X2 → 3 rows × 2 cols when product matches cells. */
+            return { rows: a, cols: b, cells: cells || product, name };
+          }
+        }
+
+        if (cells > 0) {
+          if (cols > 0 && cells % cols === 0) return { cols, rows: cells / cols, cells, name };
+          if (rows > 0 && cells % rows === 0) return { rows, cols: cells / rows, cells, name };
+          /* Fully broken (e.g. 1×1 with cells:4) — one row strip. */
+          if (rows <= 1 && cols <= 1) return { rows: 1, cols: cells, cells, name };
+          const guessCols = Math.min(cells, Math.max(1, Math.ceil(Math.sqrt(cells))));
+          return { cols: guessCols, rows: Math.ceil(cells / guessCols), cells, name };
+        }
+
+        return { rows: rows > 0 ? rows : 1, cols: cols > 0 ? cols : 1, cells: Math.max(1, (rows || 1) * (cols || 1)), name };
+      }
+
+      function resolveSchemaGridDims(regionDef, slotCount, payload) {
         const layout = (regionDef && regionDef.layout) || {};
+
+        /* Explicit page geometry wins when it forms a valid rectangle. */
         if (layout.rows != null && layout.cols != null) {
-          return { rows: Number(layout.rows), cols: Number(layout.cols) };
+          const rows = Number(layout.rows);
+          const cols = Number(layout.cols);
+          if (rows > 0 && cols > 0 && (!slotCount || rows * cols >= slotCount)) {
+            return { rows, cols };
+          }
         }
         if (layout.cells != null && layout.cols != null) {
           const cols = Number(layout.cols);
-          return { cols, rows: Math.ceil(Number(layout.cells) / cols) };
+          if (cols > 0) return { cols, rows: Math.ceil(Number(layout.cells) / cols) };
         }
 
-        const options = Array.isArray(layout.options) ? layout.options : [];
+        const options = Array.isArray(layout.options) ? layout.options.map(normalizeGridOption).filter(Boolean) : [];
         const byName = new Map(options.map((opt) => [String(opt.name || '').toUpperCase(), opt]));
-        const selected = String(layout.selected || layout.active || layout.name || layout.default || '').toUpperCase();
-        if (selected && byName.has(selected)) {
-          const opt = byName.get(selected);
-          return { rows: Number(opt.rows), cols: Number(opt.cols) };
+
+        /* 1) Prefer the option whose cell count matches the payload items. */
+        if (slotCount > 0) {
+          const byCells = options.find((opt) => Number(opt.cells) === slotCount);
+          if (byCells) return { rows: byCells.rows, cols: byCells.cols };
         }
-        for (const opt of options) {
-          if (Number(opt.cells) === slotCount) {
-            return { rows: Number(opt.rows), cols: Number(opt.cols) };
+
+        /* 2) Explicit selected/active name — only if it fits the item count. */
+        const selectedName = String(layout.selected || layout.active || layout.name || '').toUpperCase();
+        if (selectedName && byName.has(selectedName)) {
+          const opt = byName.get(selectedName);
+          if (!slotCount || Number(opt.cells) === slotCount || opt.rows * opt.cols >= slotCount) {
+            return { rows: opt.rows, cols: opt.cols };
+          }
+        }
+
+        /* 3) Age / selection-rule heuristic when options exist but count is ambiguous. */
+        if (options.length && payload && payload.request) {
+          const ageGroup = String(payload.request.ageGroup || '');
+          const ageMin = Number(payload.request.ageMin);
+          const younger =
+            /lkg|ukg|2-3|3-4|2-4/i.test(ageGroup) || (!Number.isNaN(ageMin) && ageMin < 4);
+          const preferCells = younger ? 4 : 6;
+          const preferred = options.find((opt) => Number(opt.cells) === preferCells);
+          if (preferred && (!slotCount || slotCount === preferCells)) {
+            return { rows: preferred.rows, cols: preferred.cols };
+          }
+        }
+
+        /* 4) Declared default — only when its cells match the payload. */
+        const defaultName = String(layout.default || '').toUpperCase();
+        if (defaultName && byName.has(defaultName)) {
+          const opt = byName.get(defaultName);
+          if (!slotCount || Number(opt.cells) === slotCount) {
+            return { rows: opt.rows, cols: opt.cols };
           }
         }
 
@@ -2237,6 +2332,8 @@
 
         /* Last resort: infer a compact grid from the payload's own item count. */
         const count = Math.max(1, n || 1);
+        if (count === 4) return { rows: 1, cols: 4 };
+        if (count === 6) return { rows: 3, cols: 2 };
         const cols = Math.min(5, Math.max(1, Number(layout.cols) || Math.ceil(Math.sqrt(count))));
         return { cols, rows: Math.ceil(count / cols) };
       }
@@ -2721,7 +2818,7 @@
 
         const entries = resolveRegionComponentEntries(regionDef, ctx.componentMap);
         const slots = groupEntriesIntoGridSlots(entries);
-        const dims = resolveSchemaGridDims(regionDef, slots.length);
+        const dims = resolveSchemaGridDims(regionDef, slots.length, ctx.payload);
         const capacity = Math.max(1, dims.rows * dims.cols);
         const isWords = isSightWordsSchemaGrid(regionDef, entries);
 
@@ -2733,12 +2830,17 @@
         main.className = 'uno-main';
         const grid = document.createElement('div');
         grid.className = 'schema-grid' + (isWords ? ' schema-grid--words' : '');
+        if (isWords) {
+          grid.classList.add(dims.rows === 1 ? 'schema-grid--words-strip' : 'schema-grid--words-fill');
+        }
         grid.style.gridTemplateColumns = 'repeat(' + dims.cols + ', 1fr)';
-        /* Sight words: content-sized rows so the block can center in the card.
-           Number / read-numbers grids keep equal 1fr rows to fill the body. */
-        grid.style.gridTemplateRows = isWords
-          ? 'repeat(' + dims.rows + ', minmax(16cqw, auto))'
-          : 'repeat(' + dims.rows + ', 1fr)';
+        /* Sight-word strips (1 row) size to content and center; multi-row fills
+           the card body evenly. Other schema grids keep equal 1fr rows. */
+        if (isWords && dims.rows === 1) {
+          grid.style.gridTemplateRows = 'minmax(18cqw, auto)';
+        } else {
+          grid.style.gridTemplateRows = 'repeat(' + dims.rows + ', 1fr)';
+        }
 
         const dense = capacity > 30 || dims.cols >= 5;
 

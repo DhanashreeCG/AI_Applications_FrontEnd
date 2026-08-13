@@ -1015,6 +1015,88 @@
         border-radius: 2.4cqw;
       }
 
+      /* Number-sequence: stay inside the fixed 5:7 UNO card; scale cells to fit */
+      .layout-root.layout-schema {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      .layout-schema .schema-grid-region--number-seq,
+      .layout-schema .layout-region[data-region-id='numbers'] {
+        flex: 1 1 auto;
+        min-height: 0;
+        width: 100%;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .layout-schema .schema-grid-region--number-seq .uno-main {
+        flex: 1 1 auto;
+        min-height: 0;
+        width: 100%;
+        overflow: hidden;
+      }
+
+      .layout-schema .schema-grid--number-seq {
+        flex: 1 1 auto;
+        width: 100%;
+        height: 100%;
+        max-height: 100%;
+        min-height: 0;
+        box-sizing: border-box;
+        gap: 1cqw;
+        padding: 0.4cqw 0;
+        align-content: stretch;
+        justify-content: stretch;
+        overflow: hidden;
+      }
+
+      .layout-schema .schema-grid--number-seq.is-dense {
+        gap: 0.55cqw;
+      }
+
+      .layout-schema .schema-grid--number-seq.is-xl-dense {
+        gap: 0.35cqw;
+      }
+
+      .layout-schema .schema-grid--number-seq .schema-grid-cell {
+        padding: 0;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      .layout-schema .schema-grid--number-seq .schema-badge {
+        box-sizing: border-box;
+        height: 100%;
+        width: auto;
+        max-width: 100%;
+        max-height: 100%;
+        aspect-ratio: 1 / 1;
+        font-size: 4.2cqw;
+        padding: 0;
+      }
+
+      .layout-schema .schema-grid--number-seq.is-dense .schema-badge {
+        font-size: 3.4cqw;
+      }
+
+      .layout-schema .schema-grid--number-seq.is-xl-dense .schema-badge {
+        font-size: 2.7cqw;
+      }
+
+      .layout-schema .schema-grid--number-seq .schema-badge.blank,
+      .layout-schema .schema-grid--number-seq .schema-blank {
+        height: 100%;
+        width: auto;
+        max-width: 100%;
+        max-height: 100%;
+        aspect-ratio: 1 / 1;
+        font-size: 3.6cqw;
+      }
+
       /* Sight-words grid only: even outer margin + true center in the card body */
       .layout-schema .schema-grid-region--words {
         flex: 1 1 auto;
@@ -2896,14 +2978,19 @@
         if (isWords && dims.rows === 1) {
           grid.style.gridTemplateRows = 'minmax(18cqw, auto)';
         } else {
-          grid.style.gridTemplateRows = 'repeat(' + dims.rows + ', 1fr)';
+          grid.style.gridTemplateRows = 'repeat(' + dims.rows + ', minmax(0, 1fr))';
         }
-        /* Number sequence: fill top-to-bottom, then next column (column-major). */
+        /* Number sequence: fill top-to-bottom, then next column (column-major),
+           and densify so every numeral fits inside the fixed UNO card. */
         if (isNumberSeq) {
           grid.style.gridAutoFlow = 'column';
+          if (dims.rows >= 9 || capacity >= 40) grid.classList.add('is-xl-dense');
+          else if (dims.rows >= 7 || capacity >= 24) grid.classList.add('is-dense');
         }
 
-        const dense = capacity > 30 || dims.cols >= 5;
+        const dense = isNumberSeq
+          ? dims.rows >= 7 || capacity >= 24
+          : capacity > 30 || dims.cols >= 5;
 
         for (let i = 0; i < capacity; i += 1) {
           const slot = slots[i];

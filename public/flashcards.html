@@ -1097,6 +1097,121 @@
         font-size: 3.6cqw;
       }
 
+      /* Letter-trace / phonics examples: header chrome + large letter + 2 small pairs */
+      .layout-schema .schema-header-stack {
+        flex: 0 0 auto;
+        min-height: 0;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 1.4cqw;
+        overflow: visible;
+      }
+
+      .layout-schema .schema-header-stack.has-letter-hero {
+        flex: 0 1 auto;
+      }
+
+      .layout-schema .schema-header-stack > .uno-top {
+        flex: 0 0 auto;
+      }
+
+      .layout-schema .schema-letter-hero {
+        flex: 0 0 auto;
+        width: 100%;
+        display: grid;
+        place-items: center;
+        overflow: visible;
+        padding: 0.6cqw 0 1.2cqw;
+      }
+
+      .layout-schema .schema-letter-hero .uno-figure {
+        width: min(34cqw, 72%);
+        aspect-ratio: 1 / 1;
+        height: auto;
+        max-height: 34cqw;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+      }
+
+      .layout-schema .schema-letter-hero .uno-figure img {
+        width: 100%;
+        height: 100%;
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        object-position: center;
+      }
+
+      .layout-schema .schema-grid-region--examples {
+        flex: 0 0 auto;
+        width: 100%;
+        margin-top: auto;
+        padding-bottom: 2.8cqw;
+        overflow: visible;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .layout-schema .schema-grid-region--examples .uno-main {
+        flex: 0 0 auto;
+        min-height: 0;
+        overflow: visible;
+      }
+
+      .layout-schema .schema-grid--examples {
+        flex: 0 0 auto;
+        width: 100%;
+        height: auto;
+        gap: 2.4cqw;
+        padding: 0;
+        align-content: center;
+        overflow: visible;
+      }
+
+      .layout-schema .schema-grid--examples .schema-grid-cell {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 1cqw;
+        min-height: 0;
+        padding: 0;
+        overflow: visible;
+      }
+
+      .layout-schema .schema-grid--examples .uno-figure {
+        flex: 0 0 auto;
+        width: 16cqw;
+        height: 16cqw;
+        max-width: 16cqw;
+        max-height: 16cqw;
+        aspect-ratio: 1 / 1;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+      }
+
+      .layout-schema .schema-grid--examples .uno-figure img {
+        width: 100%;
+        height: 100%;
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        object-position: center;
+      }
+
+      .layout-schema .schema-grid--examples .cell-label,
+      .layout-schema .schema-grid--examples .schema-plain {
+        flex: 0 0 auto;
+        width: 100%;
+        text-align: center;
+        font-size: 4.4cqw;
+        font-weight: 800;
+        line-height: 1.1;
+      }
+
       /* Sight-words grid only: even outer margin + true center in the card body */
       .layout-schema .schema-grid-region--words {
         flex: 1 1 auto;
@@ -2888,13 +3003,26 @@
       }
 
       function isSightWordsSchemaGrid(regionDef, entries) {
-        const sample = (entries && entries[0]) || ((regionDef && regionDef.components) || [])[0];
+        const comps = (regionDef && regionDef.components) || [];
+        /* Image+word example grids (letter-trace) are not sight-word grids. */
+        if (
+          comps.some((c) => {
+            const id = String(c.id || '').toLowerCase();
+            const type = String(c.type || '').toLowerCase();
+            const role = String(c.semanticRole || '');
+            return type === 'image' || /^image-/.test(id) || /phonics\.example\.image/i.test(role);
+          })
+        ) {
+          return false;
+        }
+
+        const sample = (entries && entries[0]) || comps[0];
         if (!sample) {
           return String((regionDef && regionDef.id) || '').toLowerCase() === 'grid';
         }
         const role = semanticRoleOf(sample.def || sample, sample.data || sample);
         if (/sightwords/i.test(role)) return true;
-        const id = String((sample.id || sample.def && sample.def.id || sample.componentId || '')).toLowerCase();
+        const id = String((sample.id || (sample.def && sample.def.id) || sample.componentId || '')).toLowerCase();
         return /^word-/.test(id) || id === 'word-{x}';
       }
 
@@ -2910,9 +3038,43 @@
           !(((regionDef && regionDef.components) || []).some((c) => /reading|number-/i.test(c.id || '')));
       }
 
+      function isExamplePairSchemaGrid(regionDef, slots) {
+        const regionId = String((regionDef && regionDef.id) || '').toLowerCase();
+        if (regionId === 'examples') return true;
+        const comps = (regionDef && regionDef.components) || [];
+        if (comps.some((c) => /phonics\.example/i.test(String(c.semanticRole || '')))) return true;
+        return (slots || []).some((slot) =>
+          (slot.items || []).some((entry) => {
+            const type = String((entry.def && entry.def.type) || (entry.data && (entry.data.type || entry.data.componentType)) || '').toLowerCase();
+            const id = String(entry.id || '').toLowerCase();
+            return type === 'image' || /^image-/.test(id) || !!(entry.data && entry.data.assetReference);
+          }),
+        );
+      }
+
+      function isLetterHeroComponent(compDef, data) {
+        const id = String((compDef && compDef.id) || (data && data.componentId) || '').toLowerCase();
+        const role = semanticRoleOf(compDef, data);
+        return id === 'letterimage' || /phonics\.letter\.image/i.test(role);
+      }
+
+      function entryIsImage(entry) {
+        if (!entry) return false;
+        const type = String((entry.def && entry.def.type) || (entry.data && (entry.data.type || entry.data.componentType)) || '').toLowerCase();
+        const id = String(entry.id || (entry.def && entry.def.id) || '').toLowerCase();
+        if (type === 'image' || /^image-/.test(id)) return true;
+        const merged = mergeComponentDef(entry.def || {}, entry.data);
+        return !!(merged.assetReference || isImageComponent(merged.raw || merged));
+      }
+
       function renderSchemaGridItem(entry, ctx, options) {
         const merged = mergeComponentDef(entry.def, entry.data);
         if (merged.visible === false) return null;
+
+        /* Images must never be treated as blank text cells. */
+        if (entryIsImage(entry)) {
+          return renderImageComponent(entry.def, merged, ctx);
+        }
 
         const blank = isBlankFillContent(merged.content);
         const asBadge = shouldRenderAsBadge(entry.def, entry.data, merged.content);
@@ -2944,6 +3106,32 @@
         return node;
       }
 
+      function renderSchemaExamplePairCell(slot, ctx) {
+        const cell = document.createElement('div');
+        cell.className = 'schema-grid-cell';
+        cell.dataset.slotIndex = String(slot.index);
+
+        const figures = [];
+        const labels = [];
+        for (const entry of slot.items || []) {
+          const merged = mergeComponentDef(entry.def, entry.data);
+          if (merged.visible === false) continue;
+          if (entryIsImage(entry)) {
+            figures.push(renderImageComponent(entry.def, merged, ctx));
+          } else {
+            const label = document.createElement('div');
+            label.className = 'cell-label';
+            label.dataset.componentId = merged.componentId || entry.id || '';
+            label.textContent = merged.content || '';
+            makeEditable(label, merged);
+            labels.push(label);
+          }
+        }
+        figures.forEach((node) => cell.appendChild(node));
+        labels.forEach((node) => cell.appendChild(node));
+        return cell;
+      }
+
       function renderSchemaGridRegion(regionDef, ctx) {
         const regionNode = document.createElement('div');
         regionNode.className = 'layout-region schema-grid-region';
@@ -2956,11 +3144,13 @@
         const capacity = Math.max(1, dims.rows * dims.cols);
         const isWords = isSightWordsSchemaGrid(regionDef, entries);
         const isNumberSeq = !isWords && isNumberSequenceSchemaGrid(regionDef, entries);
+        const isExamples = !isWords && !isNumberSeq && isExamplePairSchemaGrid(regionDef, slots);
 
         validateSchemaGridContract(regionDef, dims, slots.length);
 
         if (isWords) regionNode.classList.add('schema-grid-region--words');
         if (isNumberSeq) regionNode.classList.add('schema-grid-region--number-seq');
+        if (isExamples) regionNode.classList.add('schema-grid-region--examples');
 
         const main = document.createElement('div');
         main.className = 'uno-main';
@@ -2968,7 +3158,8 @@
         grid.className =
           'schema-grid' +
           (isWords ? ' schema-grid--words' : '') +
-          (isNumberSeq ? ' schema-grid--number-seq' : '');
+          (isNumberSeq ? ' schema-grid--number-seq' : '') +
+          (isExamples ? ' schema-grid--examples' : '');
         if (isWords) {
           grid.classList.add(dims.rows === 1 ? 'schema-grid--words-strip' : 'schema-grid--words-fill');
         }
@@ -2994,13 +3185,19 @@
 
         for (let i = 0; i < capacity; i += 1) {
           const slot = slots[i];
-          const cell = document.createElement('div');
           if (!slot || !slot.items.length) {
-            cell.className = 'schema-grid-cell empty';
-            grid.appendChild(cell);
+            const empty = document.createElement('div');
+            empty.className = 'schema-grid-cell empty';
+            grid.appendChild(empty);
             continue;
           }
 
+          if (isExamples) {
+            grid.appendChild(renderSchemaExamplePairCell(slot, ctx));
+            continue;
+          }
+
+          const cell = document.createElement('div');
           cell.className = 'schema-grid-cell';
           cell.dataset.slotIndex = String(slot.index);
           slot.items.forEach((entry, indexInCell) => {
@@ -3019,9 +3216,62 @@
         return regionNode;
       }
 
+      /**
+       * Header with optional letter hero (letterImage stays out of the top bar).
+       * Top row: skillLabel + logo. Below: large tracing letter when present.
+       */
+      function renderHeaderRegion(regionDef, ctx) {
+        const stack = document.createElement('div');
+        stack.className = 'layout-region schema-header-stack';
+        stack.dataset.regionId = 'header';
+
+        const top = document.createElement('div');
+        top.className = 'layout-region';
+        top.dataset.regionId = 'header-chrome';
+
+        const heroDefs = [];
+        const pairedTargets = new Set(
+          (regionDef.components || []).map((c) => c.pairedWith).filter(Boolean),
+        );
+
+        for (const compDef of regionDef.components || []) {
+          const id = (compDef.id || '').toLowerCase();
+          if (id === 'brandinglogo') continue;
+          if (pairedTargets.has(compDef.id)) continue;
+          const data = ctx.componentMap.get(compDef.id);
+          if (isLetterHeroComponent(compDef, data)) {
+            heroDefs.push({ compDef, data });
+            continue;
+          }
+          const node = ComponentFactory.render(compDef, data, ctx);
+          if (node) top.appendChild(node);
+        }
+
+        decorateHeaderRegion(top, ctx);
+        stack.appendChild(top);
+
+        if (heroDefs.length) {
+          const hero = document.createElement('div');
+          hero.className = 'schema-letter-hero';
+          heroDefs.forEach(({ compDef, data }) => {
+            const merged = mergeComponentDef(compDef, data);
+            if (merged.visible === false) return;
+            hero.appendChild(renderImageComponent(compDef, merged, ctx));
+          });
+          stack.appendChild(hero);
+          stack.classList.add('has-letter-hero');
+        }
+
+        return stack;
+      }
+
       function renderRegion(regionDef, ctx) {
         if (isSchemaGridRegion(regionDef)) {
           return renderSchemaGridRegion(regionDef, ctx);
+        }
+
+        if ((regionDef.id || '').toLowerCase() === 'header') {
+          return renderHeaderRegion(regionDef, ctx);
         }
 
         const regionNode = document.createElement('div');

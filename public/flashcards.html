@@ -2816,6 +2816,18 @@
         return /^word-/.test(id) || id === 'word-{x}';
       }
 
+      function isNumberSequenceSchemaGrid(regionDef, entries) {
+        const sample = (entries && entries[0]) || ((regionDef && regionDef.components) || [])[0];
+        if (sample) {
+          const role = semanticRoleOf(sample.def || sample, sample.data || sample);
+          if (/\.sequence\.item$/i.test(role) || /counting\.sequence/i.test(role)) return true;
+          const id = String((sample.id || (sample.def && sample.def.id) || sample.componentId || '')).toLowerCase();
+          if (/^num-/.test(id) || id === 'num-{x}') return true;
+        }
+        return String((regionDef && regionDef.id) || '').toLowerCase() === 'numbers' &&
+          !(((regionDef && regionDef.components) || []).some((c) => /reading|number-/i.test(c.id || '')));
+      }
+
       function renderSchemaGridItem(entry, ctx, options) {
         const merged = mergeComponentDef(entry.def, entry.data);
         if (merged.visible === false) return null;
@@ -2861,15 +2873,20 @@
         const dims = resolveSchemaGridDims(regionDef, slots.length, ctx.payload);
         const capacity = Math.max(1, dims.rows * dims.cols);
         const isWords = isSightWordsSchemaGrid(regionDef, entries);
+        const isNumberSeq = !isWords && isNumberSequenceSchemaGrid(regionDef, entries);
 
         validateSchemaGridContract(regionDef, dims, slots.length);
 
         if (isWords) regionNode.classList.add('schema-grid-region--words');
+        if (isNumberSeq) regionNode.classList.add('schema-grid-region--number-seq');
 
         const main = document.createElement('div');
         main.className = 'uno-main';
         const grid = document.createElement('div');
-        grid.className = 'schema-grid' + (isWords ? ' schema-grid--words' : '');
+        grid.className =
+          'schema-grid' +
+          (isWords ? ' schema-grid--words' : '') +
+          (isNumberSeq ? ' schema-grid--number-seq' : '');
         if (isWords) {
           grid.classList.add(dims.rows === 1 ? 'schema-grid--words-strip' : 'schema-grid--words-fill');
         }
@@ -2880,6 +2897,10 @@
           grid.style.gridTemplateRows = 'minmax(18cqw, auto)';
         } else {
           grid.style.gridTemplateRows = 'repeat(' + dims.rows + ', 1fr)';
+        }
+        /* Number sequence: fill top-to-bottom, then next column (column-major). */
+        if (isNumberSeq) {
+          grid.style.gridAutoFlow = 'column';
         }
 
         const dense = capacity > 30 || dims.cols >= 5;

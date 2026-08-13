@@ -629,9 +629,10 @@
       .uno-top {
         display: flex;
         align-items: center;
-        justify-content: flex-end;
+        justify-content: space-between;
         gap: 2cqw;
         flex: 0 0 auto;
+        width: 100%;
       }
 
       .uno-cat {
@@ -642,6 +643,8 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        margin-right: auto;
+        text-align: left;
       }
 
       .uno-logo {
@@ -778,15 +781,18 @@
         min-height: 0;
         display: flex;
         flex-direction: column;
+        align-items: center;
         gap: 1cqw;
       }
 
       .uno-cell .uno-figure {
         flex: 1 1 auto;
+        width: 100%;
       }
 
       .cell-label {
         flex: 0 0 auto;
+        width: 100%;
         text-align: center;
         font-family: 'Baloo 2', sans-serif;
         font-weight: 700;
@@ -1395,6 +1401,25 @@
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 2cqw;
+        align-items: stretch;
+      }
+
+      .layout-root.two-column .uno-cell {
+        align-items: center;
+        justify-content: flex-start;
+        text-align: center;
+        min-height: 0;
+      }
+
+      .layout-root.two-column .uno-cell .uno-figure {
+        flex: 1 1 auto;
+        width: 100%;
+        min-height: 0;
+      }
+
+      .layout-root.two-column .uno-cell .cell-label {
+        margin-top: 0.6cqw;
+        text-align: center;
       }
 
       .layout-root.grid .layout-region[data-region-id='body'] .uno-cells {
@@ -1435,8 +1460,9 @@
       .layout-region[data-region-id='header'] {
         flex: 0 0 auto;
         align-items: center;
-        justify-content: flex-end;
+        justify-content: space-between;
         gap: 2cqw;
+        width: 100%;
       }
 
       .layout-region[data-region-id='body'] {
@@ -2377,13 +2403,16 @@
 
       function mergeComponentDef(def, data) {
         return {
-          componentId: def.id || (data && data.componentId) || '',
-          type: def.type || (data && (data.type || data.componentType)) || 'text',
-          editable: def.editable != null ? def.editable : data && data.editable,
-          required: def.required != null ? def.required : data && data.required,
-          visible: def.visible != null ? def.visible : data ? data.visible : true,
-          constraints: def.constraints || (data && data.constraints) || null,
-          content: data ? contentFromComponent(data) : null,
+          componentId: (def && def.id) || (data && data.componentId) || '',
+          type: (def && def.type) || (data && (data.type || data.componentType)) || 'text',
+          editable: def && def.editable != null ? def.editable : data && data.editable,
+          required: def && def.required != null ? def.required : data && data.required,
+          visible: def && def.visible != null ? def.visible : data ? data.visible : true,
+          constraints: (def && def.constraints) || (data && data.constraints) || null,
+          content:
+            (data && contentFromComponent(data)) ||
+            (def && def.content != null && def.content !== '' ? def.content : null) ||
+            null,
           assetReference: data && data.assetReference,
           metadata: data && data.metadata,
           options: data && (data.options || data.choices),
@@ -2742,26 +2771,37 @@
       })();
 
       /** Builds a single `.uno-cell` (figure + label) from a region's raw
-       * component definitions. Shared by the four-quadrant layout and the
-       * generalised two-column pair-list fallback so both stay in sync. */
+       * component definitions. Images always stack above text labels so
+       * comparison / opposite cards read as picture-then-word. */
       function renderCellFromRegionComponents(components, ctx) {
         const cell = document.createElement('div');
         cell.className = 'uno-cell';
+
+        const figures = [];
+        const labels = [];
+
         for (const compDef of components || []) {
           const type = (compDef.type || '').toLowerCase();
+          const id = (compDef.id || '').toLowerCase();
+          if (id === 'brandinglogo') continue;
           const data = ctx.componentMap.get(compDef.id);
           const merged = mergeComponentDef(compDef, data);
           if (merged.visible === false) continue;
-          if (type === 'image') {
-            cell.appendChild(renderImageComponent(compDef, merged, ctx));
+
+          if (type === 'image' || isImageComponent(merged.raw || merged)) {
+            figures.push(renderImageComponent(compDef, merged, ctx));
           } else {
             const label = document.createElement('div');
             label.className = 'cell-label';
             label.dataset.componentId = merged.componentId || '';
             label.textContent = merged.content || '';
-            cell.appendChild(label);
+            makeEditable(label, merged);
+            labels.push(label);
           }
         }
+
+        figures.forEach((node) => cell.appendChild(node));
+        labels.forEach((node) => cell.appendChild(node));
         return cell;
       }
 
@@ -2943,27 +2983,48 @@
         const right = grouped.byId.get('right');
 
         if (left || right) {
-          const row = document.createElement('div');
-          row.className = 'layout-row uno-cells duo';
-          if (left) row.appendChild(renderRegion(left, ctx));
-          if (right) row.appendChild(renderRegion(right, ctx));
-          if (row.childNodes.length) root.appendChild(row);
+          let pairEmitted = false;
           for (const region of layoutDef.regions || []) {
-            if (region.id === 'left' || region.id === 'right') continue;
+            const id = (region.id || '').toLowerCase();
+            if (id === 'left' || id === 'right') {
+              if (pairEmitted) continue;
+              pairEmitted = true;
+              const main = document.createElement('div');
+              main.className = 'uno-main';
+              const row = document.createElement('div');
+              row.className = 'layout-row uno-cells duo';
+              /* Image above centered label — same cell pattern as other
+                 picture+word cards (opposites, compare). */
+              if (left) row.appendChild(renderCellFromRegionComponents(left.components, ctx));
+              if (right) row.appendChild(renderCellFromRegionComponents(right.components, ctx));
+              if (row.childNodes.length) {
+                main.appendChild(row);
+                root.appendChild(main);
+              }
+              continue;
+            }
             root.appendChild(renderRegion(region, ctx));
           }
           return root;
         }
 
+        /* Stacked pair-list: keep header/footer as normal regions so skillLabel
+           + logo stay in the top bar (same as sight-words / schema cards). */
         const list = document.createElement('div');
         list.className = 'uno-cells layout-pair-list';
         for (const region of layoutDef.regions || []) {
+          const id = (region.id || '').toLowerCase();
+          if (id === 'header' || id === 'footer' || id === 'bottom' || id === 'instruction') {
+            if (list.childNodes.length && !list.parentNode) root.appendChild(list);
+            root.appendChild(renderRegion(region, ctx));
+            continue;
+          }
           const row = document.createElement('div');
           row.className = 'uno-cells duo layout-pair-row';
           row.appendChild(renderCellFromRegionComponents(region.components, ctx));
           list.appendChild(row);
         }
-        root.appendChild(list);
+        if (list.childNodes.length && !list.parentNode) root.appendChild(list);
         return root;
       }
 
@@ -2985,37 +3046,56 @@
       }
 
       /**
-       * 2-column-by-3-row sequence grid: alphabet / number sequences and
-       * sight-word grids. Every text component in a non-'instruction' region
-       * becomes one grid cell; an empty value renders as a dashed blank.
+       * 2-column-by-3-row sequence grid: alphabet / number sequences,
+       * opposite-word pairs, etc. Header (skillLabel + logo) renders as the
+       * standard top bar; only content regions become grid cells.
        */
       function grid2x3Layout(layoutDef, ctx) {
         const root = document.createElement('div');
         root.className = 'layout-root layout-vertical layout-grid-2x3';
         const grouped = groupRegions(layoutDef.regions || []);
+        const chromeIds = new Set(['header', 'instruction', 'footer', 'bottom']);
+
+        const header = grouped.byId.get('header');
+        if (header) root.appendChild(renderRegion(header, ctx));
 
         for (const region of layoutDef.regions || []) {
-          if (region.id === 'instruction') continue;
+          const regionId = (region.id || '').toLowerCase();
+          if (chromeIds.has(regionId)) continue;
+
           const main = document.createElement('div');
           main.className = 'uno-main';
           const grid = document.createElement('div');
           grid.className = 'grid-2x3';
+
           for (const compDef of region.components || []) {
-            const data = ctx.componentMap.get(compDef.id);
-            const merged = mergeComponentDef(compDef, data);
-            if (merged.visible === false) continue;
-            const cell = document.createElement('div');
-            cell.className = 'grid-2x3-cell' + (merged.content ? '' : ' blank');
-            cell.dataset.componentId = merged.componentId || '';
-            cell.textContent = merged.content || '_';
-            grid.appendChild(cell);
+            const rawId = (compDef.id || '').toLowerCase();
+            if (rawId === 'brandinglogo' || rawId === 'skilllabel' || rawId === 'subject') continue;
+
+            const resolved = resolvePatternComponents(compDef, ctx.componentMap);
+            const entries = resolved.length
+              ? resolved
+              : [{ def: compDef, data: ctx.componentMap.get(compDef.id), id: compDef.id }];
+
+            for (const entry of entries) {
+              const merged = mergeComponentDef(entry.def, entry.data);
+              if (merged.visible === false) continue;
+              const cell = document.createElement('div');
+              cell.className = 'grid-2x3-cell' + (merged.content ? '' : ' blank');
+              cell.dataset.componentId = merged.componentId || entry.id || '';
+              cell.textContent = merged.content || '_';
+              grid.appendChild(cell);
+            }
           }
+
           main.appendChild(grid);
           root.appendChild(main);
         }
 
         const instruction = grouped.byId.get('instruction');
         if (instruction) root.appendChild(renderRegion(instruction, ctx));
+        const footer = grouped.byId.get('footer') || grouped.byId.get('bottom');
+        if (footer) root.appendChild(renderRegion(footer, ctx));
 
         return root;
       }

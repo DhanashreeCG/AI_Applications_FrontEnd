@@ -1109,7 +1109,9 @@
       }
 
       .layout-schema .schema-header-stack.has-letter-hero {
-        flex: 0 1 auto;
+        flex: 1 1 auto;
+        min-height: 0;
+        justify-content: flex-start;
       }
 
       .layout-schema .schema-header-stack > .uno-top {
@@ -1117,19 +1119,22 @@
       }
 
       .layout-schema .schema-letter-hero {
-        flex: 0 0 auto;
+        flex: 1 1 auto;
+        min-height: 0;
         width: 100%;
         display: grid;
         place-items: center;
-        overflow: visible;
-        padding: 0.6cqw 0 1.2cqw;
+        overflow: hidden;
+        margin: 1.8cqw 0;
+        padding: 0;
       }
 
       .layout-schema .schema-letter-hero .uno-figure {
-        width: min(34cqw, 72%);
+        width: min(72cqw, 94%);
+        height: min(72cqw, 100%);
+        max-width: 94%;
+        max-height: 100%;
         aspect-ratio: 1 / 1;
-        height: auto;
-        max-height: 34cqw;
         display: grid;
         place-items: center;
         overflow: hidden;

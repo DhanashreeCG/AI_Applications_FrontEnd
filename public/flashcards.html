@@ -649,35 +649,27 @@
 
       .uno-logo {
         display: inline-flex;
-        align-items: flex-end;
-        gap: 0.5cqw;
+        align-items: center;
+        justify-content: center;
         flex: 0 0 auto;
-        font-family: 'Baloo 2', sans-serif;
-        font-weight: 800;
-        line-height: 1;
+        width: 8cqw;
+        height: 8cqw;
+        min-width: 28px;
+        min-height: 28px;
+        overflow: hidden;
+        line-height: 0;
+        /* border-radius: 1.6cqw; */
+        /* background: #0a0a0a; */
       }
 
-      .uno-logo span {
-        font-size: 4.6cqw;
-        padding: 0.5cqw 0.9cqw;
-        border-radius: 1.2cqw;
-        color: #fff;
-      }
-
-      .uno-logo span:nth-child(1) {
-        background: #5b1d9c;
-        transform: rotate(-6deg);
-      }
-
-      .uno-logo span:nth-child(2) {
-        background: #f5b700;
-        color: #3a2a00;
-        transform: translateY(-0.6cqw);
-      }
-
-      .uno-logo span:nth-child(3) {
-        background: #e0245e;
-        transform: rotate(7deg);
+      .uno-logo img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        object-position: center;
+        opacity: 1;
+        visibility: visible;
       }
 
       /* ---- main / figures ---- */
@@ -2672,7 +2664,77 @@
         Object.assign(node.style, styles);
       }
 
-      function decorateHeaderRegion(regionNode) {
+      function pickHeaderLogoSrc(ctx, categoryText) {
+        const template = (ctx && ctx.payload && ctx.payload.template) || {};
+        const request = (ctx && ctx.payload && ctx.payload.request) || {};
+        const objectives = []
+          .concat(template.learningObjectives || [])
+          .concat(request.learningObjective || [])
+          .filter(Boolean)
+          .map((item) => String(item).toLowerCase());
+        const objectiveText = objectives.join(' ');
+
+        const hay = [
+          objectiveText,
+          template.templateType,
+          template.name,
+          template.id,
+          template.description,
+          request.topic,
+          request.query,
+          request.educationalIntent,
+          request.subject,
+          categoryText,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+
+        const logos = {
+          abc: '/logos/abc.png',
+          '123': '/logos/123.png',
+          reading: '/logos/reading.png',
+          fact: '/logos/fact.png',
+          colors: '/logos/colors.png',
+          quiz: '/logos/quiz.png',
+        };
+
+        /* Prefer template.learningObjectives matches (exact-ish phrases first). */
+        const has = (re) => re.test(objectiveText) || (!objectiveText && re.test(hay));
+
+        if (has(/number sequence|number recognition|counting|numeral|digit|math/)) {
+          return logos['123'];
+        }
+        if (has(/question\s*&\s*answer|question and answer|\bquiz\b|\bmcq\b/)) {
+          return logos.quiz;
+        }
+        if (has(/science facts|\bknowledge\b|\bfact\b/)) {
+          return logos.fact;
+        }
+        if (has(/\bcolors?\b|\bcolours?\b|\bpaint\b|\bart\b/)) {
+          return logos.colors;
+        }
+        if (has(/alphabet|letter recognition|\bphonics\b|\bsight words?\b|\bsequencing\b|\btrace\b/)) {
+          return logos.abc;
+        }
+        if (
+          has(
+            /\breading\b|\bvocabulary\b|word recognition|\bidentification\b|\bclassification\b|\bcomparison\b|visual comparison|\bmatching\b|\bmemory\b|\brecognition\b/,
+          )
+        ) {
+          return logos.reading;
+        }
+
+        /* Fallback on broader template/request fields. */
+        if (/number|count|math|sequence|digit|numeral|123/.test(hay)) return logos['123'];
+        if (/quiz|mcq|question|test|exam/.test(hay)) return logos.quiz;
+        if (/fact|knowledge|science/.test(hay)) return logos.fact;
+        if (/color|colour|paint|art/.test(hay)) return logos.colors;
+        if (/letter|alphabet|phonics|sight|spell|trace|abc/.test(hay)) return logos.abc;
+        return logos.reading;
+      }
+
+      function decorateHeaderRegion(regionNode, ctx) {
         regionNode.classList.add('uno-top');
 
         /* Any single text label in the header (ids vary by template — e.g.
@@ -2685,15 +2747,14 @@
           categoryText = labelNode.textContent;
         }
 
-        /* The brand mark is always synthesised here rather than rendered
-           from a template-supplied image component (see renderRegion,
-           which skips a 'brandingLogo' component definition), so every
-           template gets an identical, dependency-free logo. */
         const logo = document.createElement('span');
         logo.className = 'uno-logo';
-        logo.setAttribute('aria-hidden', 'true');
-        const marks = /number|count|math|shape/i.test(categoryText) ? ['1', '2', '3'] : ['A', 'B', 'C'];
-        logo.innerHTML = marks.map((m) => '<span>' + m + '</span>').join('');
+        const img = document.createElement('img');
+        img.src = pickHeaderLogoSrc(ctx, categoryText);
+        img.alt = 'logo';
+        img.decoding = 'async';
+        img.loading = 'eager';
+        logo.appendChild(img);
         regionNode.appendChild(logo);
       }
 
